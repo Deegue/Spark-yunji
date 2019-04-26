@@ -76,6 +76,8 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sparkSession.sessionState.executePlan(logicalPlan)
     qe.assertAnalyzed()
+    // scalastyle:off println
+    println(qe.toString)
     new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
   }
 }

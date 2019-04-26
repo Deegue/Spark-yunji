@@ -19,12 +19,16 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
+import java.util.{ArrayList => JArrayList}
 import java.util.{Locale, Map => JMap}
+import java.util.concurrent.ConcurrentHashMap
+import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.antlr.runtime.NoViableAltException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -32,16 +36,23 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.hooks.{Entity, ReadEntity, WriteEntity}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyzerFactory}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.security.authorization.AuthorizationUtils
+import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveAccessControlException, HiveAuthzContext, HiveOperationType, HivePrivilegeObject}
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -93,6 +104,24 @@ private[hive] class HiveClientImpl(
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   private val outputBuffer = new CircularBuffer()
+
+  private val viewCache = new ConcurrentHashMap[String, String]();
+
+  // private val pattern = "CREATE\\s+GLOBAL\\s+TEMPORARY\\s+VIEW"
+  // private val global_pattern = "\\s+global_temp.[0-9a-zA-Z_]+"
+  // private val p = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE)
+  // private val global_pattern_p = Pattern.compile(global_pattern, Pattern.CASE_INSENSITIVE)
+
+  private val localViewRegex = "(CREATE|REPLACE)\\s+(TEMPORARY|TEMP)\\s+VIEW\\s+(\\S+)?\\s+AS\\s+"
+  private val globalViewRegex = "(CREATE|REPLACE)\\s+(GLOBAL)\\s+(TEMPORARY|TEMP)\\s+" +
+    "VIEW\\s+(\\S+)?\\s+AS\\s+"
+  private val cacheSelectRegex = "CACHE\\s+(LAZY)?TABLE\\s+(\\S+)?\\s+AS\\s+"
+  private val localTempViewPattern = Pattern.compile(localViewRegex, Pattern.CASE_INSENSITIVE)
+  private val globalTempViewPattern = Pattern.compile(globalViewRegex, Pattern.CASE_INSENSITIVE)
+  private val cacheTablePattern = Pattern.compile("CACHE\\s+(LAZY)?TABLE", Pattern.CASE_INSENSITIVE)
+  private val cacheSelectPattern = Pattern.compile(cacheSelectRegex, Pattern.CASE_INSENSITIVE)
+  private val dropTempViewPattern = Pattern.compile("DROP\\s+VIEW\\s+(\\S+)?\\s+")
+  private val GLOBAL_TEMP_VIEW_SCHEMA = "global_temp."
 
   private val shim = version match {
     case hive.v12 => new Shim_v0_12()
@@ -190,6 +219,215 @@ private[hive] class HiveClientImpl(
   def conf: HiveConf = state.getConf
 
   private val userName = conf.getUser
+
+
+  def auth(cmd: String, currentDatabase: String): Unit = {
+    logInfo("AAAAAA Enter auth.")
+    // don't execute privilege auth of hive admin user
+    val adminUser = HiveConf.getVar(conf, HiveConf.ConfVars.USERS_IN_ADMIN_ROLE)
+    val sparkUser = SparkSession.builder().getOrCreate().sparkContext.sparkUser
+    if (sparkUser != null && sparkUser.equalsIgnoreCase(adminUser)) {
+      logInfo("AAAAAA User of Admin.")
+      return
+    }
+
+    val prepareCommand = cmd.replaceAll("\\n", " ")
+    if (! needAuth(prepareCommand)) {
+      logInfo("AAAAAA Don't need auth.")
+      return
+    }
+
+    val begin = System.currentTimeMillis()
+    val command = preprocessCommand(prepareCommand)
+    val elapsed = (System.currentTimeMillis() - begin)
+    logInfo("AAAAAA command pre process elapsed " + elapsed + " ms")
+
+    val original = Thread.currentThread().getContextClassLoader
+    try {
+      Thread.currentThread.setContextClassLoader(clientLoader.classLoader)
+      val originState = SessionState.get()
+      val ss = if (originState != null) {
+        logInfo("AAAAAA Start SessionState from current SessionState")
+        SessionState.start(originState)
+      } else {
+        logInfo("AAAAAA Start a new SessionState")
+        SessionState.start(state.getConf)
+      }
+      ss.setCurrentDatabase(currentDatabase)
+      ss.initTxnMgr(ss.getConf)
+      ss.setIsHiveServerQuery(true)
+
+      val hiveCommand = new VariableSubstitution().substitute(conf, command)
+      val ctx = new Context(ss.getConf)
+      ctx.setTryCount(10)
+      ctx.setCmd(hiveCommand)
+      ctx.setHDFSCleanup(true)
+      val pd = new ParseDriver()
+      var tree = pd.parse(hiveCommand, ctx)
+      tree = ParseUtils.findRootNonNullToken(tree)
+      val sem = SemanticAnalyzerFactory.get(ss.getConf, tree)
+
+      sem.analyze(tree, ctx)
+      logInfo("AAAAAA Semantic Analysis Completed")
+      // validate the plan
+      sem.validate()
+      val inputs = sem.getInputs
+      val outputs = sem.getOutputs
+
+      val hiveOperation = ss.getHiveOperation
+      logInfo("AAAAAA HiveOperation:" + hiveOperation)
+
+      val hiveOp = HiveOperationType.valueOf(hiveOperation.name())
+      val inputsHObjs = getHivePrivObjects(inputs, hiveOp, true)
+      val outputHObjs = getHivePrivObjects(outputs, hiveOp, false)
+      val authzContextBuilder = new HiveAuthzContext.Builder()
+      authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
+      authzContextBuilder.setCommandString(command)
+      val authorizerV2 = ss.getAuthorizerV2()
+      if (authorizerV2 != null) {
+        authorizerV2.checkPrivileges(hiveOp, inputsHObjs, outputHObjs, authzContextBuilder.build())
+      } else {
+        logError("AAAAAA authorizerV2 is null")
+      }
+    } catch {
+      case e: HiveAccessControlException =>
+        throw e
+      case e: NoViableAltException =>
+        logWarning("AAAAAA authorize hive privilege failed, ", e)
+      case e@ (_: Exception | _: Throwable | _: Error) =>
+        logWarning("AAAAAA authorize hive privilege failed, ", e)
+    } finally {
+      Thread.currentThread.setContextClassLoader(original)
+    }
+  }
+
+  def preprocessCommand(command: String): String = {
+
+    val localTempViewMatcher = localTempViewPattern.matcher(command)
+    val globalTempViewMatcher = globalTempViewPattern.matcher(command)
+    val cacheTableMatcher = cacheTablePattern.matcher(command)
+    val cacheSelectMatcher = cacheSelectPattern.matcher(command)
+    var processCmd = command
+
+    if (localTempViewMatcher.find()) {
+      val viewName = localTempViewMatcher.group(3).trim
+      val viewDef = localTempViewMatcher.replaceFirst("")
+      viewCache.put(viewName, viewDef)
+      viewDef
+    } else if (cacheSelectMatcher.find()) {
+      val cacheTableName = cacheSelectMatcher.group(2).trim
+      val cacheTableDef = cacheSelectMatcher.replaceFirst("")
+      viewCache.put(cacheTableName, cacheTableDef)
+      cacheTableDef
+    } else if (cacheTableMatcher.find()) {
+      cacheTableMatcher.replaceFirst("select * from ")
+    } else if (globalTempViewMatcher.find()) {
+      val globalViewName = GLOBAL_TEMP_VIEW_SCHEMA + globalTempViewMatcher.group(4).trim
+      val globalViewDef = globalTempViewMatcher.replaceFirst("")
+      viewCache.put(globalViewName, globalViewDef)
+      globalViewDef
+    } else {
+      logWarning("AAAAAA there is no matcher which is need to process")
+      for (view <- viewCache.asScala.keySet) {
+        if (processCmd.contains(view)) {
+          val viewDef = viewCache.get(view)
+          logInfo("AAAAAA replace " + view + "in \n" + viewDef)
+          processCmd = processCmd.replaceAll(view, "( " + viewDef + " )")
+        }
+      }
+      processCmd
+    }
+  }
+
+  def needAuth(command: String): Boolean = {
+    var needAuth = true
+    val maxPrefixLength = 100
+    val prefixLen = if (command.length > maxPrefixLength) {
+      maxPrefixLength // the value doesn't have special meaning
+    } else {
+      command.length
+    }
+    val prefixCmd = command.trim.substring(0, prefixLen).toLowerCase()
+    val dropTempViewMatcher = dropTempViewPattern.matcher(command)
+
+    if (prefixCmd.startsWith("show ")) {
+      needAuth = false
+    } else if (prefixCmd.startsWith("add ")) {
+      needAuth = false
+    } else if (prefixCmd.startsWith("reset ")) {
+      needAuth = false
+    } else if (prefixCmd.startsWith("set ")) {
+      needAuth = false
+    } else if (prefixCmd.startsWith("describe ")) {
+      needAuth = false
+    } else if (prefixCmd.startsWith("explain")) {
+      needAuth = false
+    } else if (prefixCmd.startsWith("uncache ")) {
+      needAuth = false
+    } else if (dropTempViewMatcher.find()) {
+      val viewName = dropTempViewMatcher.group(1)
+      if (viewCache.contains(viewName)) {
+        viewCache.remove(viewName)
+        needAuth = false
+      }
+    } else {
+      needAuth = true
+    }
+
+    return needAuth
+  }
+
+  def getHivePrivObjects(privObjects: java.util.HashSet[_ <: Entity],
+                         hiveOperationType: HiveOperationType,
+                         isInput: Boolean): JArrayList[HivePrivilegeObject] = {
+    val hivePrivobjs = new JArrayList[HivePrivilegeObject]()
+    if (privObjects == null) {
+      return hivePrivobjs
+    }
+    privObjects.asScala.foreach { entity =>
+      var flag = true
+      val privObjType = AuthorizationUtils.getHivePrivilegeObjectType(entity.getType())
+      if (entity.isInstanceOf[ReadEntity] && !entity.asInstanceOf[ReadEntity].isDirect()) {
+        flag = false
+      }
+      if (entity.isInstanceOf[WriteEntity] && entity.asInstanceOf[WriteEntity].isTempURI()) {
+        flag = false
+      }
+      if (flag) {
+        var dbName: String = null
+        var objName: String = null
+        var isFunction = false
+        entity.getType() match {
+          case Entity.Type.DATABASE =>
+            dbName = if (entity.getDatabase() == null) null else entity.getDatabase().getName()
+          case Entity.Type.TABLE =>
+            dbName = if (entity.getTable() == null) null else entity.getTable().getDbName()
+            objName = if (entity.getTable() == null) null else entity.getTable().getTableName()
+          case Entity.Type.DFS_DIR =>
+          case Entity.Type.LOCAL_DIR =>
+            objName = entity.getD().toString()
+          case Entity.Type.FUNCTION =>
+            isFunction = true
+          case Entity.Type.DUMMYPARTITION =>
+          case Entity.Type.PARTITION =>
+          case _ =>
+            throw new AssertionError("Unexpected object type")
+        }
+        if (!"global_temp".equals(dbName) && !isFunction) {
+          val actionType = AuthorizationUtils.getActionType(entity)
+          val hPrivObject = new HivePrivilegeObject(privObjType, dbName, objName, actionType)
+          hivePrivobjs.add(hPrivObject)
+
+          if (privObjType == HivePrivilegeObjectType.TABLE_OR_VIEW && isInput) {
+            val hPrivObject2 = new HivePrivilegeObject(HivePrivilegeObjectType.DATABASE,
+              dbName, objName, actionType)
+            hivePrivobjs.add(hPrivObject2)
+          }
+        }
+      }
+    }
+    hivePrivobjs
+  }
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)

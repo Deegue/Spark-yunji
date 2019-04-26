@@ -79,6 +79,13 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
+  def hivePrivilegeAuth(plan: LogicalPlan): Unit = {
+    // scalastyle:off println
+    plan.foreachUp {
+      p => println(p.toString)
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.

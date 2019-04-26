@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<project name="maven-antrun-" default="main"  >
-<target name="main">
-  <delete dir="/Users/heguozi/Desktop/Projects/spark-origin/assembly/../python/lib/pyspark.zip"/>
-  <zip destfile="/Users/heguozi/Desktop/Projects/spark-origin/assembly/../python/lib/pyspark.zip">
-    <fileset includes="pyspark/**/*" dir="/Users/heguozi/Desktop/Projects/spark-origin/assembly/../python/"/>
-  </zip>
-</target>
-</project>

@@ -168,4 +168,6 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
+
+  def auth(command: String): Unit = Nil
 }

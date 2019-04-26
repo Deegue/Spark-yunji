@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.scheduler.SQLEvent
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
@@ -43,7 +44,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected lazy val resourceLoader: HiveSessionResourceLoader = {
     new HiveSessionResourceLoader(
-      session, () => externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client)
+      session, () => externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client, catalog)
   }
 
   /**
@@ -105,11 +106,22 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
 class HiveSessionResourceLoader(
     session: SparkSession,
-    clientBuilder: () => HiveClient)
+    clientBuilder: () => HiveClient,
+    catalog: HiveSessionCatalog)
   extends SessionResourceLoader(session) {
   private lazy val client = clientBuilder()
   override def addJar(path: String): Unit = {
     client.addJar(path)
     super.addJar(path)
+  }
+
+  override def auth(command: String): Unit = {
+    if (session.sparkContext.conf.getBoolean("spark.hive.sql.collect", true)) {
+      session.sparkContext.listenerBus.post(SQLEvent(command))
+    }
+    if (!session.sparkContext.conf.getBoolean("spark.hive.auth.enable", true)) {
+      return
+    }
+    client.auth(command, catalog.getCurrentDatabase)
   }
 }

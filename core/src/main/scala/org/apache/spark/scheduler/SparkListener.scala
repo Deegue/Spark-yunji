@@ -56,6 +56,11 @@ case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListe
 case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
 
 @DeveloperApi
+case class SQLEvent(sql: String) extends SparkListenerEvent {
+  override protected[spark] def logEvent: Boolean = false
+}
+
+@DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
     stageAttemptId: Int,

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <project name="maven-antrun-" default="main"  >
 <target name="main">
-  <mkdir dir="/Users/heguozi/Desktop/Projects/spark-origin/common/network-yarn/target/tmp"/>
+  <mkdir dir="/Users/heguozi/Desktop/yunji/Spark-yunji/common/network-yarn/target/tmp"/>
 </target>
 </project>
