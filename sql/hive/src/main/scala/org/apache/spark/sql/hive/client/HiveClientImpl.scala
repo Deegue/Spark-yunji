@@ -221,7 +221,7 @@ private[hive] class HiveClientImpl(
   private val userName = conf.getUser
 
 
-  def auth(cmd: String, currentDatabase: String): Unit = {
+  override def auth(cmd: String, currentDatabase: String): Unit = {
     logInfo("AAAAAA Enter auth.")
     // don't execute privilege auth of hive admin user
     val adminUser = HiveConf.getVar(conf, HiveConf.ConfVars.USERS_IN_ADMIN_ROLE)

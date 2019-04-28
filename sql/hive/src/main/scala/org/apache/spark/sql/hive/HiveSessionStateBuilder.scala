@@ -39,12 +39,27 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
   private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
 
+  lazy val metadataHive: HiveClient = {
+    session.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+      .client.newSession()
+  }
+
+  override def auth(command: String): Unit = {
+    if (session.sparkContext.conf.getBoolean("spark.hive.sql.collect", true)) {
+      session.sparkContext.listenerBus.post(SQLEvent(command))
+    }
+    if (!session.sparkContext.conf.getBoolean("spark.hive.auth.enable", true)) {
+      return
+    }
+    metadataHive.auth(command, catalog.getCurrentDatabase)
+  }
+
   /**
    * Create a Hive aware resource loader.
    */
   override protected lazy val resourceLoader: HiveSessionResourceLoader = {
     new HiveSessionResourceLoader(
-      session, () => externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client, catalog)
+      session, () => externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client)
   }
 
   /**
@@ -106,8 +121,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
 
 class HiveSessionResourceLoader(
     session: SparkSession,
-    clientBuilder: () => HiveClient,
-    catalog: HiveSessionCatalog)
+    clientBuilder: () => HiveClient)
   extends SessionResourceLoader(session) {
   private lazy val client = clientBuilder()
   override def addJar(path: String): Unit = {
@@ -115,13 +129,4 @@ class HiveSessionResourceLoader(
     super.addJar(path)
   }
 
-  override def auth(command: String): Unit = {
-    if (session.sparkContext.conf.getBoolean("spark.hive.sql.collect", true)) {
-      session.sparkContext.listenerBus.post(SQLEvent(command))
-    }
-    if (!session.sparkContext.conf.getBoolean("spark.hive.auth.enable", true)) {
-      return
-    }
-    client.auth(command, catalog.getCurrentDatabase)
-  }
 }

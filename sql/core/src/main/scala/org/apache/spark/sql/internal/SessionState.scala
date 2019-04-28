@@ -71,7 +71,8 @@ private[sql] class SessionState(
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
-    createClone: (SparkSession, SessionState) => SessionState) {
+    createClone: (SparkSession, SessionState) => SessionState,
+    checkAuth: String => (Boolean, String)) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
@@ -81,6 +82,8 @@ private[sql] class SessionState(
   lazy val optimizer: Optimizer = optimizerBuilder()
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
+
+  def authSQL(sqlText: String): (Boolean, String) = checkAuth(sqlText)
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
@@ -168,6 +171,4 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
-
-  def auth(command: String): Unit = Nil
 }

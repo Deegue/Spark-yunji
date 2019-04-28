@@ -297,8 +297,12 @@ abstract class BaseSessionStateBuilder(
       listenerManager,
       () => resourceLoader,
       createQueryExecution,
-      createClone)
+      createClone,
+      (sqlText: String) => auth(sqlText))
   }
+
+  protected[sql] def auth(sqlText: String): (Boolean, String) = (true, "=======")
+
 }
 
 /**

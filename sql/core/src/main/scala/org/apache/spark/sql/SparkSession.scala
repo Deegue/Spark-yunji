@@ -639,7 +639,9 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    sessionState.resourceLoader.auth(sqlText)
+    logWarning("AAAAAA Will execute SQL.(before auth) " + System.currentTimeMillis())
+    sessionState.authSql(sqlText)
+    logWarning("AAAAAA Will execute SQL.(after auth) " + System.currentTimeMillis())
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
   }
 
