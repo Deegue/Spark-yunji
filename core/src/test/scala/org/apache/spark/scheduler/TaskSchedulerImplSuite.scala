@@ -20,12 +20,10 @@ package org.apache.spark.scheduler
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.duration._
 
 import org.mockito.Matchers.{anyInt, anyObject, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
@@ -42,7 +40,7 @@ class FakeSchedulerBackend extends SchedulerBackend {
 }
 
 class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfterEach
-    with Logging with MockitoSugar with Eventually {
+    with Logging with MockitoSugar {
 
   var failedTaskSetException: Option[Throwable] = None
   var failedTaskSetReason: String = null
@@ -84,12 +82,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     setupHelper()
   }
 
-  def setupSchedulerWithMockTaskSetBlacklist(confs: (String, String)*): TaskSchedulerImpl = {
+  def setupSchedulerWithMockTaskSetBlacklist(): TaskSchedulerImpl = {
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
-    confs.foreach { case (k, v) => conf.set(k, v) }
-
     sc = new SparkContext(conf)
     taskScheduler =
       new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
@@ -201,39 +197,28 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // Even if one of the task sets has not-serializable tasks, the other task set should
     // still be processed without error
     taskScheduler.submitTasks(FakeTask.createTaskSet(1))
-    val taskSet2 = new TaskSet(
-      Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 1, 0, 0, null)
-    taskScheduler.submitTasks(taskSet2)
+    taskScheduler.submitTasks(taskSet)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
-  test("concurrent attempts for the same stage only have one active taskset") {
+  test("refuse to schedule concurrent attempts for the same stage (SPARK-8103)") {
     val taskScheduler = setupScheduler()
-    def isTasksetZombie(taskset: TaskSet): Boolean = {
-      taskScheduler.taskSetManagerForAttempt(taskset.stageId, taskset.stageAttemptId).get.isZombie
-    }
-
     val attempt1 = FakeTask.createTaskSet(1, 0)
-    taskScheduler.submitTasks(attempt1)
-    // The first submitted taskset is active
-    assert(!isTasksetZombie(attempt1))
-
     val attempt2 = FakeTask.createTaskSet(1, 1)
-    taskScheduler.submitTasks(attempt2)
-    // The first submitted taskset is zombie now
-    assert(isTasksetZombie(attempt1))
-    // The newly submitted taskset is active
-    assert(!isTasksetZombie(attempt2))
+    taskScheduler.submitTasks(attempt1)
+    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt2) }
 
+    // OK to submit multiple if previous attempts are all zombie
+    taskScheduler.taskSetManagerForAttempt(attempt1.stageId, attempt1.stageAttemptId)
+      .get.isZombie = true
+    taskScheduler.submitTasks(attempt2)
     val attempt3 = FakeTask.createTaskSet(1, 2)
+    intercept[IllegalStateException] { taskScheduler.submitTasks(attempt3) }
+    taskScheduler.taskSetManagerForAttempt(attempt2.stageId, attempt2.stageAttemptId)
+      .get.isZombie = true
     taskScheduler.submitTasks(attempt3)
-    // The first submitted taskset remains zombie
-    assert(isTasksetZombie(attempt1))
-    // The second submitted taskset is zombie now
-    assert(isTasksetZombie(attempt2))
-    // The newly submitted taskset is active
-    assert(!isTasksetZombie(attempt3))
+    assert(!failedTaskSet)
   }
 
   test("don't schedule more tasks after a taskset is zombie") {
@@ -481,7 +466,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
   }
 
-  test("abort stage when all executors are blacklisted and we cannot acquire new executor") {
+  test("abort stage when all executors are blacklisted") {
     taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
     val taskSet = FakeTask.createTaskSet(numTasks = 10, stageAttemptId = 0)
     taskScheduler.submitTasks(taskSet)
@@ -516,185 +501,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     )).flatten.size === 0)
     assert(tsm.isZombie)
     verify(tsm).abort(anyString(), anyObject())
-  }
-
-  test("SPARK-22148 abort timer should kick in when task is completely blacklisted & no new " +
-      "executor can be acquired") {
-    // set the abort timer to fail immediately
-    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
-      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0")
-
-    // We have only 1 task remaining with 1 executor
-    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageAttemptId = 0)
-    taskScheduler.submitTasks(taskSet)
-    val tsm = stageToMockTaskSetManager(0)
-
-    // submit an offer with one executor
-    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten
-
-    // Fail the running task
-    val failedTask = firstTaskAttempts.find(_.executorId == "executor0").get
-    taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
-    // we explicitly call the handleFailedTask method here to avoid adding a sleep in the test suite
-    // Reason being - handleFailedTask is run by an executor service and there is a momentary delay
-    // before it is launched and this fails the assertion check.
-    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, UnknownReason)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
-      "executor0", failedTask.index)).thenReturn(true)
-
-    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
-    // timer to kick in immediately
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten.size === 0)
-    // Wait for the abort timer to kick in. Even though we configure the timeout to be 0, there is a
-    // slight delay as the abort timer is launched in a separate thread.
-    eventually(timeout(500.milliseconds)) {
-      assert(tsm.isZombie)
-    }
-  }
-
-  test("SPARK-22148 try to acquire a new executor when task is unschedulable with 1 executor") {
-    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
-      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "10")
-
-    // We have only 1 task remaining with 1 executor
-    val taskSet = FakeTask.createTaskSet(numTasks = 1, stageAttemptId = 0)
-    taskScheduler.submitTasks(taskSet)
-    val tsm = stageToMockTaskSetManager(0)
-
-    // submit an offer with one executor
-    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten
-
-    // Fail the running task
-    val failedTask = firstTaskAttempts.head
-    taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
-    // we explicitly call the handleFailedTask method here to avoid adding a sleep in the test suite
-    // Reason being - handleFailedTask is run by an executor service and there is a momentary delay
-    // before it is launched and this fails the assertion check.
-    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, UnknownReason)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
-      "executor0", failedTask.index)).thenReturn(true)
-
-    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
-    // timer to expire if no new executors could be acquired. We kill the existing idle blacklisted
-    // executor and try to acquire a new one.
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten.size === 0)
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
-    assert(!tsm.isZombie)
-
-    // Offer a new executor which should be accepted
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor1", "host0", 1)
-    )).flatten.size === 1)
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
-    assert(!tsm.isZombie)
-  }
-
-  // This is to test a scenario where we have two taskSets completely blacklisted and on acquiring
-  // a new executor we don't want the abort timer for the second taskSet to expire and abort the job
-  test("SPARK-22148 abort timer should clear unschedulableTaskSetToExpiryTime for all TaskSets") {
-    taskScheduler = setupSchedulerWithMockTaskSetBlacklist()
-
-    // We have 2 taskSets with 1 task remaining in each with 1 executor completely blacklisted
-    val taskSet1 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
-    taskScheduler.submitTasks(taskSet1)
-    val taskSet2 = FakeTask.createTaskSet(numTasks = 1, stageId = 1, stageAttemptId = 0)
-    taskScheduler.submitTasks(taskSet2)
-    val tsm = stageToMockTaskSetManager(0)
-
-    // submit an offer with one executor
-    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten
-
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
-
-    // Fail the running task
-    val failedTask = firstTaskAttempts.head
-    taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
-    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, UnknownReason)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
-      "executor0", failedTask.index)).thenReturn(true)
-
-    // make an offer. We will schedule the task from the second taskSet. Since a task was scheduled
-    // we do not kick off the abort timer for taskSet1
-    val secondTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten
-
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
-
-    val tsm2 = stageToMockTaskSetManager(1)
-    val failedTask2 = secondTaskAttempts.head
-    taskScheduler.statusUpdate(failedTask2.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
-    tsm2.handleFailedTask(failedTask2.taskId, TaskState.FAILED, UnknownReason)
-    when(tsm2.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
-      "executor0", failedTask2.index)).thenReturn(true)
-
-    // make an offer on the blacklisted executor.  We won't schedule anything, and set the abort
-    // timer for taskSet1 and taskSet2
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten.size === 0)
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm2))
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.size == 2)
-
-    // Offer a new executor which should be accepted
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor1", "host1", 1)
-    )).flatten.size === 1)
-
-    // Check if all the taskSets are cleared
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
-
-    assert(!tsm.isZombie)
-  }
-
-  // this test is to check that we don't abort a taskSet which is not being scheduled on other
-  // executors as it is waiting on locality timeout and not being aborted because it is still not
-  // completely blacklisted.
-  test("SPARK-22148 Ensure we don't abort the taskSet if we haven't been completely blacklisted") {
-    taskScheduler = setupSchedulerWithMockTaskSetBlacklist(
-      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "0",
-      // This is to avoid any potential flakiness in the test because of large pauses in jenkins
-      config.LOCALITY_WAIT.key -> "30s"
-    )
-
-    val preferredLocation = Seq(ExecutorCacheTaskLocation("host0", "executor0"))
-    val taskSet1 = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0,
-      preferredLocation)
-    taskScheduler.submitTasks(taskSet1)
-
-    val tsm = stageToMockTaskSetManager(0)
-
-    // submit an offer with one executor
-    var taskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor0", "host0", 1)
-    )).flatten
-
-    // Fail the running task
-    val failedTask = taskAttempts.head
-    taskScheduler.statusUpdate(failedTask.taskId, TaskState.FAILED, ByteBuffer.allocate(0))
-    tsm.handleFailedTask(failedTask.taskId, TaskState.FAILED, UnknownReason)
-    when(tsm.taskSetBlacklistHelperOpt.get.isExecutorBlacklistedForTask(
-      "executor0", failedTask.index)).thenReturn(true)
-
-    // make an offer but we won't schedule anything yet as scheduler locality is still PROCESS_LOCAL
-    assert(taskScheduler.resourceOffers(IndexedSeq(
-      WorkerOffer("executor1", "host0", 1)
-    )).flatten.isEmpty)
-
-    assert(taskScheduler.unschedulableTaskSetToExpiryTime.isEmpty)
-
-    assert(!tsm.isZombie)
   }
 
   /**

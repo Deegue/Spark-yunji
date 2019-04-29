@@ -33,9 +33,9 @@ From: 'The Apache Software Foundation' (http://www.apache.org/)
 From: 'The Apache Software Foundation' (https://www.apache.org/)
   - Apache Commons Lang (http://commons.apache.org/proper/commons-lang/) org.apache.commons:commons-lang3:jar:3.5
     License: Apache License, Version 2.0  (https://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Spark Project Networking (http://spark.apache.org/) org.apache.spark:spark-network-common_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Networking (http://spark.apache.org/) org.apache.spark:spark-network-common_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Shuffle Streaming Service (http://spark.apache.org/) org.apache.spark:spark-network-shuffle_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Shuffle Streaming Service (http://spark.apache.org/) org.apache.spark:spark-network-shuffle_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
 
 From: 'The Netty Project' (http://netty.io/)

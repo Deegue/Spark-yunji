@@ -376,8 +376,7 @@ object LoadDataCommand {
    * @return qualified path object
    */
   private[sql] def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
-    val newPath = new Path(workingDir, path)
-    val pathUri = if (path.isAbsolute()) path.toUri() else newPath.toUri()
+    val pathUri = if (path.isAbsolute()) path.toUri() else new Path(workingDir, path).toUri()
     if (pathUri.getScheme == null || pathUri.getAuthority == null &&
         defaultUri.getAuthority != null) {
       val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
@@ -394,7 +393,7 @@ object LoadDataCommand {
           throw new IllegalArgumentException(e)
       }
     } else {
-      newPath
+      path
     }
   }
 }

@@ -356,15 +356,13 @@ private[spark] object JettyUtils extends Logging {
 
         (connector, connector.getLocalPort())
       }
-      val httpConfig = new HttpConfiguration()
-      httpConfig.setRequestHeaderSize(conf.get(UI_REQUEST_HEADER_SIZE).toInt)
 
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
         val connectionFactories = AbstractConnectionFactory.getFactories(factory,
-          new HttpConnectionFactory(httpConfig))
+          new HttpConnectionFactory())
 
         def sslConnect(currentPort: Int): (ServerConnector, Int) = {
           newConnector(connectionFactories, currentPort)
@@ -379,7 +377,7 @@ private[spark] object JettyUtils extends Logging {
 
       // Bind the HTTP port.
       def httpConnect(currentPort: Int): (ServerConnector, Int) = {
-        newConnector(Array(new HttpConnectionFactory(httpConfig)), currentPort)
+        newConnector(Array(new HttpConnectionFactory()), currentPort)
       }
 
       val (httpConnector, httpPort) = Utils.startServiceOnPort[ServerConnector](port, httpConnect,

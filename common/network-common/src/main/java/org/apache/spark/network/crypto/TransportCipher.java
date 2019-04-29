@@ -44,8 +44,7 @@ public class TransportCipher {
   @VisibleForTesting
   static final String ENCRYPTION_HANDLER_NAME = "TransportEncryption";
   private static final String DECRYPTION_HANDLER_NAME = "TransportDecryption";
-  @VisibleForTesting
-  static final int STREAM_BUFFER_SIZE = 1024 * 32;
+  private static final int STREAM_BUFFER_SIZE = 1024 * 32;
 
   private final Properties conf;
   private final String cipher;
@@ -85,8 +84,7 @@ public class TransportCipher {
     return outIv;
   }
 
-  @VisibleForTesting
-  CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
+  private CryptoOutputStream createOutputStream(WritableByteChannel ch) throws IOException {
     return new CryptoOutputStream(cipher, conf, ch, key, new IvParameterSpec(outIv));
   }
 
@@ -106,8 +104,7 @@ public class TransportCipher {
       .addFirst(DECRYPTION_HANDLER_NAME, new DecryptionHandler(this));
   }
 
-  @VisibleForTesting
-  static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
+  private static class EncryptionHandler extends ChannelOutboundHandlerAdapter {
     private final ByteArrayWritableChannel byteChannel;
     private final CryptoOutputStream cos;
 
@@ -119,12 +116,7 @@ public class TransportCipher {
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
       throws Exception {
-      ctx.write(createEncryptedMessage(msg), promise);
-    }
-
-    @VisibleForTesting
-    EncryptedMessage createEncryptedMessage(Object msg) {
-      return new EncryptedMessage(cos, msg, byteChannel);
+      ctx.write(new EncryptedMessage(cos, msg, byteChannel), promise);
     }
 
     @Override
@@ -169,12 +161,10 @@ public class TransportCipher {
     }
   }
 
-  @VisibleForTesting
-  static class EncryptedMessage extends AbstractFileRegion {
+  private static class EncryptedMessage extends AbstractFileRegion {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
-    private final long count;
     private long transferred;
     private CryptoOutputStream cos;
 
@@ -196,12 +186,11 @@ public class TransportCipher {
       this.byteRawChannel = new ByteArrayWritableChannel(STREAM_BUFFER_SIZE);
       this.cos = cos;
       this.byteEncChannel = ch;
-      this.count = isByteBuf ? buf.readableBytes() : region.count();
     }
 
     @Override
     public long count() {
-      return count;
+      return isByteBuf ? buf.readableBytes() : region.count();
     }
 
     @Override
@@ -253,38 +242,22 @@ public class TransportCipher {
     public long transferTo(WritableByteChannel target, long position) throws IOException {
       Preconditions.checkArgument(position == transferred(), "Invalid position.");
 
-      if (transferred == count) {
-        return 0;
-      }
-
-      long totalBytesWritten = 0L;
       do {
         if (currentEncrypted == null) {
           encryptMore();
         }
 
-        long remaining = currentEncrypted.remaining();
-        if (remaining == 0)  {
-          // Just for safety to avoid endless loop. It usually won't happen, but since the
-          // underlying `region.transferTo` is allowed to transfer 0 bytes, we should handle it for
-          // safety.
+        int bytesWritten = currentEncrypted.remaining();
+        target.write(currentEncrypted);
+        bytesWritten -= currentEncrypted.remaining();
+        transferred += bytesWritten;
+        if (!currentEncrypted.hasRemaining()) {
           currentEncrypted = null;
           byteEncChannel.reset();
-          return totalBytesWritten;
         }
+      } while (transferred < count());
 
-        long bytesWritten = target.write(currentEncrypted);
-        totalBytesWritten += bytesWritten;
-        transferred += bytesWritten;
-        if (bytesWritten < remaining) {
-          // break as the underlying buffer in "target" is full
-          break;
-        }
-        currentEncrypted = null;
-        byteEncChannel.reset();
-      } while (transferred < count);
-
-      return totalBytesWritten;
+      return transferred;
     }
 
     private void encryptMore() throws IOException {

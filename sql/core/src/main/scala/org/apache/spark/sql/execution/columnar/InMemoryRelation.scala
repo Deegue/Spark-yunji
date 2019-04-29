@@ -74,8 +74,14 @@ case class CachedRDDBuilder(
     }
   }
 
-  def isCachedColumnBuffersLoaded: Boolean = {
-    _cachedColumnBuffers != null
+  def withCachedPlan(cachedPlan: SparkPlan): CachedRDDBuilder = {
+    new CachedRDDBuilder(
+      useCompression,
+      batchSize,
+      storageLevel,
+      cachedPlan = cachedPlan,
+      tableName
+    )(_cachedColumnBuffers)
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {

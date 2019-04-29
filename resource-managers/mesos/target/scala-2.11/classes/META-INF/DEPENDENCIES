@@ -47,9 +47,7 @@ From: 'an unknown organization'
     License: MPL 1.1  (http://www.mozilla.org/MPL/MPL-1.1.html)    License: LGPL 2.1  (http://www.gnu.org/licenses/lgpl-2.1.html)    License: Apache License 2.0  (http://www.apache.org/licenses/)
   - LZ4 and xxHash (https://github.com/lz4/lz4-java) org.lz4:lz4-java:jar:1.4.0
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - RoaringBitmap (https://github.com/RoaringBitmap/RoaringBitmap) org.roaringbitmap:RoaringBitmap:jar:0.7.45
-    License: Apache 2  (http://www.apache.org/licenses/LICENSE-2.0.txt)
-  - shims (https://github.com/RoaringBitmap/RoaringBitmap/shims) org.roaringbitmap:shims:jar:0.7.45
+  - RoaringBitmap (https://github.com/lemire/RoaringBitmap) org.roaringbitmap:RoaringBitmap:bundle:0.5.11
     License: Apache 2  (http://www.apache.org/licenses/LICENSE-2.0.txt)
   - empty (http://nexus.sonatype.org/oss-repository-hosting.html/unused) org.spark-project.spark:unused:jar:1.0.0
     License: The Apache License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
@@ -289,19 +287,19 @@ From: 'The Apache Software Foundation' (http://www.apache.org/)
 From: 'The Apache Software Foundation' (https://www.apache.org/)
   - Apache Commons Lang (http://commons.apache.org/proper/commons-lang/) org.apache.commons:commons-lang3:jar:3.5
     License: Apache License, Version 2.0  (https://www.apache.org/licenses/LICENSE-2.0.txt)
-  - Spark Project Core (http://spark.apache.org/) org.apache.spark:spark-core_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Core (http://spark.apache.org/) org.apache.spark:spark-core_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Local DB (http://spark.apache.org/) org.apache.spark:spark-kvstore_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Local DB (http://spark.apache.org/) org.apache.spark:spark-kvstore_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Launcher (http://spark.apache.org/) org.apache.spark:spark-launcher_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Launcher (http://spark.apache.org/) org.apache.spark:spark-launcher_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Networking (http://spark.apache.org/) org.apache.spark:spark-network-common_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Networking (http://spark.apache.org/) org.apache.spark:spark-network-common_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Shuffle Streaming Service (http://spark.apache.org/) org.apache.spark:spark-network-shuffle_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Shuffle Streaming Service (http://spark.apache.org/) org.apache.spark:spark-network-shuffle_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Tags (http://spark.apache.org/) org.apache.spark:spark-tags_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Tags (http://spark.apache.org/) org.apache.spark:spark-tags_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
-  - Spark Project Unsafe (http://spark.apache.org/) org.apache.spark:spark-unsafe_2.11:jar:2.4.2-SNAPSHOT
+  - Spark Project Unsafe (http://spark.apache.org/) org.apache.spark:spark-unsafe_2.11:jar:2.4.0
     License: Apache 2.0 License  (http://www.apache.org/licenses/LICENSE-2.0.html)
 
 From: 'The Netty Project' (http://netty.io/)
@@ -311,7 +309,7 @@ From: 'The Netty Project' (http://netty.io/)
     License: Apache License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 From: 'xerial.org'
-  - snappy-java (https://github.com/xerial/snappy-java) org.xerial.snappy:snappy-java:bundle:1.1.7.3
+  - snappy-java (https://github.com/xerial/snappy-java) org.xerial.snappy:snappy-java:jar:1.1.7.1
     License: The Apache Software License, Version 2.0  (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
 

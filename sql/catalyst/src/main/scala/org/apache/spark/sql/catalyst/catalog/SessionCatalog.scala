@@ -218,11 +218,6 @@ class SessionCatalog(
     if (dbName == DEFAULT_DATABASE) {
       throw new AnalysisException(s"Can not drop default database")
     }
-    if (cascade && databaseExists(dbName)) {
-      listTables(dbName).foreach { t =>
-        invalidateCachedTable(QualifiedTableName(dbName, t.table))
-      }
-    }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
 

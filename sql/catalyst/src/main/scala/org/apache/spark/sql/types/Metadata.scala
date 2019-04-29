@@ -190,8 +190,6 @@ object Metadata {
         JBool(x)
       case x: String =>
         JString(x)
-      case null =>
-        JNull
       case x: Metadata =>
         toJsonValue(x.map)
       case other =>

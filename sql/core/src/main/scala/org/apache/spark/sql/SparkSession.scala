@@ -639,9 +639,15 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    logWarning("AAAAAA Will execute SQL.(before auth) " + System.currentTimeMillis())
-    sessionState.authSql(sqlText)
-    logWarning("AAAAAA Will execute SQL.(after auth) " + System.currentTimeMillis())
+    logWarning("AAAAAA Will execute SQL.(before auth) ")
+    val (isAuth, authString) = sessionState.authSQL(sqlText)
+    if (isAuth) {
+      logWarning("BBBBBB Auth successfully!")
+    } else {
+      logWarning("BBBBBB Auth failed!!!" + authString)
+      throw new Exception(authString)
+    }
+    logWarning("AAAAAA Will execute SQL.(after auth) ")
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
   }
 

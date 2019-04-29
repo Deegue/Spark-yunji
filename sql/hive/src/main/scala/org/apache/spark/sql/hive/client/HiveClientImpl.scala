@@ -26,7 +26,7 @@ import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import org.antlr.runtime.NoViableAltException
 import org.apache.hadoop.fs.Path
@@ -34,21 +34,22 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order, Database => HiveDatabase}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.hooks.{Entity, ReadEntity, WriteEntity}
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, HiveUtils, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyzerFactory}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.ql.security.authorization.AuthorizationUtils
-import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveAccessControlException, HiveAuthzContext, HiveOperationType, HivePrivilegeObject}
+import org.apache.hadoop.hive.ql.security.authorization.{AuthorizationUtils, HiveAuthorizationProvider}
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzSessionContext.CLIENT_TYPE
+import org.apache.hadoop.hive.ql.security.authorization.plugin._
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
+import org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory
 import org.apache.hadoop.hive.ql.session.SessionState
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -122,6 +123,8 @@ private[hive] class HiveClientImpl(
   private val cacheSelectPattern = Pattern.compile(cacheSelectRegex, Pattern.CASE_INSENSITIVE)
   private val dropTempViewPattern = Pattern.compile("DROP\\s+VIEW\\s+(\\S+)?\\s+")
   private val GLOBAL_TEMP_VIEW_SCHEMA = "global_temp."
+  private val CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER =
+    "hive.internal.ss.authz.settings.applied.marker"
 
   private val shim = version match {
     case hive.v12 => new Shim_v0_12()
@@ -221,26 +224,29 @@ private[hive] class HiveClientImpl(
   private val userName = conf.getUser
 
 
-  override def auth(cmd: String, currentDatabase: String): Unit = {
+  override def auth(cmd: String, currentDatabase: String): (Boolean, String) = {
+    val checkResult = new ListBuffer[String]()
+
     logInfo("AAAAAA Enter auth.")
     // don't execute privilege auth of hive admin user
     val adminUser = HiveConf.getVar(conf, HiveConf.ConfVars.USERS_IN_ADMIN_ROLE)
     val sparkUser = SparkSession.builder().getOrCreate().sparkContext.sparkUser
     if (sparkUser != null && sparkUser.equalsIgnoreCase(adminUser)) {
       logInfo("AAAAAA User of Admin.")
-      return
+      return (true, "User of Admin.")
     }
 
     val prepareCommand = cmd.replaceAll("\\n", " ")
     if (! needAuth(prepareCommand)) {
       logInfo("AAAAAA Don't need auth.")
-      return
+      return (true, "Don't need auth.")
     }
 
     val begin = System.currentTimeMillis()
     val command = preprocessCommand(prepareCommand)
     val elapsed = (System.currentTimeMillis() - begin)
-    logInfo("AAAAAA command pre process elapsed " + elapsed + " ms")
+    logInfo("AAAAAA Command pre process elapsed " + elapsed + " ms")
+    logInfo("AAAAAA PreprocessCommand:" + command)
 
     val original = Thread.currentThread().getContextClassLoader
     try {
@@ -273,6 +279,8 @@ private[hive] class HiveClientImpl(
       sem.validate()
       val inputs = sem.getInputs
       val outputs = sem.getOutputs
+      logInfo("CCCCCC Inputs:" + inputs)
+      logInfo("CCCCCC Outputs" + outputs)
 
       val hiveOperation = ss.getHiveOperation
       logInfo("AAAAAA HiveOperation:" + hiveOperation)
@@ -283,25 +291,84 @@ private[hive] class HiveClientImpl(
       val authzContextBuilder = new HiveAuthzContext.Builder()
       authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
       authzContextBuilder.setCommandString(command)
-      val authorizerV2 = ss.getAuthorizerV2()
+      val confNew = this.state.getConf
+      confNew.set("hive.security.authorization.manager",
+        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd." +
+          "SQLStdHiveAuthorizerFactory")
+      confNew.set("hive.security.metastore.authorization.manager",
+        "org.apache.hadoop.hive.ql.security.authorization.StorageBasedAuthorizationProvider," +
+          "org.apache.hadoop.hive.ql.security.authorization.MetaStoreAuthzAPIAuthorizerEmbedOnly")
+      confNew.set("hive.security.metastore.authenticator.manager",
+        "org.apache.hadoop.hive.ql.security.HadoopDefaultMetastoreAuthenticator")
+      confNew.set("hive.security.authorization.enabled", "true")
+      this.state.setConf(confNew)
+      ss.setConf(confNew)
+      val authorizerFactory = HiveUtils.getAuthorizerFactory(
+        conf, HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER)
+      val authzSessionContextBuilder = new HiveAuthzSessionContext.Builder
+      authzSessionContextBuilder.setClientType(CLIENT_TYPE.HIVESERVER2)
+      authzSessionContextBuilder.setSessionString(ss.getSessionId)
+
+      val authorizerV2 = authorizerFactory.createHiveAuthorizer(
+        new HiveMetastoreClientFactoryImpl,
+        conf,
+        this.state.getAuthenticator,
+        authzSessionContextBuilder.build)
+
+      try {
+        authorizerV2.getCurrentRoleNames
+        logWarning("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
+      }
+      catch {
+        case e: Exception =>
+          logWarning("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
+          authorizerV2.setCurrentRole("public")
+      }
+
+      if(authorizerV2.getCurrentRoleNames == null) {
+        logWarning("BBBBBB authorizerV2.getCurrentRoleNames is null")
+        authorizerV2.setCurrentRole("public")
+      }
+
+      if (conf.get(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, "") != true.toString) {
+        conf.setVar(ConfVars.METASTORE_FILTER_HOOK,
+          "org.apache.hadoop.hive.ql.security.authorization.plugin." +
+            "AuthorizationMetaStoreFilterHook")
+        authorizerV2.applyAuthorizationConfigPolicy(conf)
+        // update config in Hive thread local as well and init the metastore client
+        try
+          Hive.get(conf).getMSC
+        catch {
+          case e: Exception =>
+            // catch-all due to some exec time dependencies on session state
+            // that would cause ClassNoFoundException otherwise
+            throw new HiveException(e.getMessage, e)
+        }
+        // set a marker that this conf has been processed.
+        conf.set(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, true.toString)
+      }
+
       if (authorizerV2 != null) {
         authorizerV2.checkPrivileges(hiveOp, inputsHObjs, outputHObjs, authzContextBuilder.build())
       } else {
-        logError("AAAAAA authorizerV2 is null")
+        logError("AAAAAA AuthorizerV2 is null")
       }
     } catch {
       case e: HiveAccessControlException =>
-        throw e
+        logWarning("AAAAAA No hive privilege, " + e.getMessage)
+        checkResult += e.getMessage
       case e: NoViableAltException =>
-        logWarning("AAAAAA authorize hive privilege failed, ", e)
+        logWarning("AAAAAA Authorize hive privilege failed, ", e)
       case e@ (_: Exception | _: Throwable | _: Error) =>
-        logWarning("AAAAAA authorize hive privilege failed, ", e)
+        logWarning("AAAAAA Authorize hive privilege failed, ", e)
     } finally {
       Thread.currentThread.setContextClassLoader(original)
     }
+    (checkResult.isEmpty, checkResult.mkString(","))
   }
 
   def preprocessCommand(command: String): String = {
+    logInfo("AAAAAA Enter preprocessCommand.")
 
     val localTempViewMatcher = localTempViewPattern.matcher(command)
     val globalTempViewMatcher = globalTempViewPattern.matcher(command)
@@ -340,6 +407,8 @@ private[hive] class HiveClientImpl(
   }
 
   def needAuth(command: String): Boolean = {
+    logInfo("AAAAAA Enter needAuth.")
+
     var needAuth = true
     val maxPrefixLength = 100
     val prefixLen = if (command.length > maxPrefixLength) {
@@ -378,8 +447,10 @@ private[hive] class HiveClientImpl(
   }
 
   def getHivePrivObjects(privObjects: java.util.HashSet[_ <: Entity],
-                         hiveOperationType: HiveOperationType,
-                         isInput: Boolean): JArrayList[HivePrivilegeObject] = {
+    hiveOperationType: HiveOperationType,
+    isInput: Boolean): JArrayList[HivePrivilegeObject] = {
+    logInfo("AAAAAA Enter getHivePrivObjects.")
+
     val hivePrivobjs = new JArrayList[HivePrivilegeObject]()
     if (privObjects == null) {
       return hivePrivobjs
@@ -671,9 +742,8 @@ private[hive] class HiveClientImpl(
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
-          case unsupportedType =>
-            val tableTypeStr = unsupportedType.toString.toLowerCase(Locale.ROOT).replace("_", " ")
-            throw new AnalysisException(s"Hive $tableTypeStr is not supported.")
+          case HiveTableType.INDEX_TABLE =>
+            throw new AnalysisException("Hive index table is not supported.")
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),

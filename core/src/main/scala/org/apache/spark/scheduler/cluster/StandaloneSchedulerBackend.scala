@@ -223,9 +223,8 @@ private[spark] class StandaloneSchedulerBackend(
     if (stopping.compareAndSet(false, true)) {
       try {
         super.stop()
-        if (client != null) {
-          client.stop()
-        }
+        client.stop()
+
         val callback = shutdownCallback
         if (callback != null) {
           callback(this)

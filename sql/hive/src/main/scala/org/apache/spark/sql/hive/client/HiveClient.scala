@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.StructType
 private[hive] trait HiveClient {
 
   /** Check authorization of hive privilege */
-  def auth(command: String, currentDatabase: String): Unit
+  def auth(command: String, currentDatabase: String): (Boolean, String)
 
   /** Returns the Hive Version of this client. */
   def version: HiveVersion

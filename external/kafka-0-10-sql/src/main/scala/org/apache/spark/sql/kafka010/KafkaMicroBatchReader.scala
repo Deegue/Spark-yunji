@@ -93,8 +93,7 @@ private[kafka010] class KafkaMicroBatchReader(
     endPartitionOffsets = Option(end.orElse(null))
         .map(_.asInstanceOf[KafkaSourceOffset].partitionToOffsets)
         .getOrElse {
-          val latestPartitionOffsets =
-            kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+          val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets()
           maxOffsetsPerTrigger.map { maxOffsets =>
             rateLimit(maxOffsets, startPartitionOffsets, latestPartitionOffsets)
           }.getOrElse {
@@ -133,21 +132,10 @@ private[kafka010] class KafkaMicroBatchReader(
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
-    val fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets
-    val untilOffsets = endPartitionOffsets
-    untilOffsets.foreach { case (tp, untilOffset) =>
-      fromOffsets.get(tp).foreach { fromOffset =>
-        if (untilOffset < fromOffset) {
-          reportDataLoss(s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset, some data may have been missed")
-        }
-      }
-    }
-
     // Calculate offset ranges
     val offsetRanges = rangeCalculator.getRanges(
-      fromOffsets = fromOffsets,
-      untilOffsets = untilOffsets,
+      fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets,
+      untilOffsets = endPartitionOffsets,
       executorLocations = getSortedExecutorList())
 
     // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
@@ -204,7 +192,7 @@ private[kafka010] class KafkaMicroBatchReader(
         case EarliestOffsetRangeLimit =>
           KafkaSourceOffset(kafkaOffsetReader.fetchEarliestOffsets())
         case LatestOffsetRangeLimit =>
-          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets(None))
+          KafkaSourceOffset(kafkaOffsetReader.fetchLatestOffsets())
         case SpecificOffsetRangeLimit(p) =>
           kafkaOffsetReader.fetchSpecificOffsets(p, reportDataLoss)
       }
@@ -239,15 +227,7 @@ private[kafka010] class KafkaMicroBatchReader(
             val begin = from.get(tp).getOrElse(fromNew(tp))
             val prorate = limit * (size / total)
             // Don't completely starve small topicpartitions
-            val prorateLong = (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
-            // need to be careful of integer overflow
-            // therefore added canary checks where to see if off variable could be overflowed
-            // refer to [https://issues.apache.org/jira/browse/SPARK-26718]
-            val off = if (prorateLong > Long.MaxValue - begin) {
-              Long.MaxValue
-            } else {
-              begin + prorateLong
-            }
+            val off = begin + (if (prorate < 1) Math.ceil(prorate) else Math.floor(prorate)).toLong
             // Paranoia, make sure not to return an offset that's past end
             Math.min(end, off)
           }.getOrElse(end)

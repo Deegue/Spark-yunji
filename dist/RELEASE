@@ -1,2 +1,2 @@
-Spark 2.4.2-SNAPSHOT (git revision 3b55223c1) built for Hadoop 2.6.5
-Build flags: -DskipTests-Psparkr -Phadoop-2.6 -Phive -Phive-thriftserver -Pmesos -Pyarn
+Spark 2.4.0 (git revision 0a4c03f7d0) built for Hadoop 2.6.5
+Build flags: -DskipTests-Psparkr -Phadoop-2.6.0 -Phive -Phive-thriftserver -Pmesos -Pyarn

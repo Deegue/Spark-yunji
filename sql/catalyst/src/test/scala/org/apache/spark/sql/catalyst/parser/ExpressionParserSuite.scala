@@ -246,11 +246,9 @@ class ExpressionParserSuite extends PlanTest {
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
-  private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
-
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
+    assertEqual("x -> x + 1", LambdaFunction('x + 1, Seq('x.attr)))
+    assertEqual("(x, y) -> x + y", LambdaFunction('x + 'y, Seq('x.attr, 'y.attr)))
   }
 
   test("window function expressions") {

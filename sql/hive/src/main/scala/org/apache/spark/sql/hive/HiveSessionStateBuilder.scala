@@ -44,12 +44,12 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       .client.newSession()
   }
 
-  override def auth(command: String): Unit = {
+  override def auth(command: String): (Boolean, String) = {
     if (session.sparkContext.conf.getBoolean("spark.hive.sql.collect", true)) {
       session.sparkContext.listenerBus.post(SQLEvent(command))
     }
     if (!session.sparkContext.conf.getBoolean("spark.hive.auth.enable", true)) {
-      return
+      return (true, "spark.hive.auth.enable is false")
     }
     metadataHive.auth(command, catalog.getCurrentDatabase)
   }
@@ -128,5 +128,4 @@ class HiveSessionResourceLoader(
     client.addJar(path)
     super.addJar(path)
   }
-
 }
