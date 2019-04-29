@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order, Database => HiveDatabase}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.Driver
@@ -45,11 +45,11 @@ import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_AS
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.security.authorization.{AuthorizationUtils, HiveAuthorizationProvider}
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzSessionContext.CLIENT_TYPE
 import org.apache.hadoop.hive.ql.security.authorization.plugin._
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzSessionContext.CLIENT_TYPE
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
-import org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory
 import org.apache.hadoop.hive.ql.session.SessionState
+
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -321,7 +321,8 @@ private[hive] class HiveClientImpl(
       }
       catch {
         case e: Exception =>
-          logWarning("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
+          logWarning("DDDDDD authorizerV2.getCurrentRoleNames is null, " +
+            "set current role to public!")
           authorizerV2.setCurrentRole("public")
       }
 
