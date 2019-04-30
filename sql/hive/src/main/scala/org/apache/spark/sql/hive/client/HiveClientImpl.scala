@@ -263,34 +263,22 @@ private[hive] class HiveClientImpl(
       confNew.set("hive.security.authorization.manager",
         "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd." +
           "SQLStdHiveAuthorizerFactory")
-      confNew.set("hive.security.authenticator.manager",
-        "org.apache.hadoop.hive.ql.security.SessionStateUserAuthenticator")
+//      confNew.set("hive.security.authenticator.manager",
+//        "org.apache.hadoop.hive.ql.security.SessionStateUserAuthenticator")
       ss.setConf(confNew)
       ss.setCurrentDatabase(currentDatabase)
-      ss.initTxnMgr(confNew)
+      ss.initTxnMgr(ss.getConf)
       ss.setIsHiveServerQuery(true)
 
-      val ss2 = SessionState.start(confNew)
-      ss2.setConf(confNew)
-      ss2.setCurrentDatabase(currentDatabase)
-      ss2.initTxnMgr(confNew)
-      ss2.setIsHiveServerQuery(true)
-
-      logInfo("EEEEEE ss UserName:" + ss.getAuthenticator.getUserName +
-        ";GroupName:" + ss.getAuthenticator.getGroupNames)
-      logInfo("EEEEEE ss2 UserName:" + ss2.getAuthenticator.getUserName +
-        ";GroupName:" + ss2.getAuthenticator.getGroupNames)
-
       val hiveCommand = new VariableSubstitution().substitute(conf, command)
-      val ctx = new Context(confNew)
+      val ctx = new Context(ss.getConf)
       ctx.setTryCount(10)
       ctx.setCmd(hiveCommand)
       ctx.setHDFSCleanup(true)
       val pd = new ParseDriver()
       var tree = pd.parse(hiveCommand, ctx)
       tree = ParseUtils.findRootNonNullToken(tree)
-      val sem = SemanticAnalyzerFactory.get(confNew, tree)
-
+      val sem = SemanticAnalyzerFactory.get(ss.getConf, tree)
       sem.analyze(tree, ctx)
       logInfo("AAAAAA Semantic Analysis Completed")
       // validate the plan
@@ -310,32 +298,27 @@ private[hive] class HiveClientImpl(
       authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
       authzContextBuilder.setCommandString(command)
 
-      val authorizerFactory = HiveUtils.getAuthorizerFactory(
-        confNew, HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER)
-      val authzSessionContextBuilder = new HiveAuthzSessionContext.Builder
-      authzSessionContextBuilder.setClientType(CLIENT_TYPE.HIVESERVER2)
-      authzSessionContextBuilder.setSessionString(ss.getSessionId)
-
-      val authorizerV2 = ss.getAuthorizerV2
+//      val authenticator = HiveUtils.getAuthenticator(
+//        ss.getConf, HiveConf.ConfVars.HIVE_AUTHENTICATOR_MANAGER)
+//      authenticator.setSessionState(ss)
+//      ss.setAuthenticator(authenticator)
+//
+//      val authorizerFactory = HiveUtils.getAuthorizerFactory(
+//        ss.getConf, HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER)
+//      val authzSessionContextBuilder = new HiveAuthzSessionContext.Builder
+//      authzSessionContextBuilder.setClientType(CLIENT_TYPE.HIVESERVER2)
+//      authzSessionContextBuilder.setSessionString(ss.getSessionId)
+//
+//      //      val authorizerV2 = ss.getAuthorizerV2()
 //      val authorizerV2 = authorizerFactory.createHiveAuthorizer(
 //        new HiveMetastoreClientFactoryImpl,
 //        ss.getConf,
 //        ss.getAuthenticator,
 //        authzSessionContextBuilder.build)
-
-      try {
-        authorizerV2.getCurrentRoleNames
-        logWarning("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
-      }
-      catch {
-        case e: Exception =>
-          logWarning("DDDDDD now spark user:" + sparkUser + ";auth user:" +
-            ss.getAuthenticator.getUserName)
-          throw new Exception("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
-      }
-
-//      if (conf.get(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, "") != true.toString) {
-//        conf.setVar(ConfVars.METASTORE_FILTER_HOOK,
+//
+//
+//      if (ss.getConf.get(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, "") != true.toString) {
+//        ss.getConf.setVar(ConfVars.METASTORE_FILTER_HOOK,
 //          "org.apache.hadoop.hive.ql.security.authorization.plugin." +
 //            "AuthorizationMetaStoreFilterHook")
 //        authorizerV2.applyAuthorizationConfigPolicy(conf)
@@ -349,8 +332,23 @@ private[hive] class HiveClientImpl(
 //            throw new HiveException(e.getMessage, e)
 //        }
 //        // set a marker that this conf has been processed.
-//        conf.set(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, true.toString)
+//        ss.getConf.set(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, true.toString)
 //      }
+
+      logInfo("EEEEEE ss UserName:" + ss.getAuthenticator.getUserName +
+        ";GroupName:" + ss.getAuthenticator.getGroupNames)
+
+      val authorizerV2 = ss.getAuthorizerV2
+      try {
+        authorizerV2.getCurrentRoleNames
+        logWarning("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
+      }
+      catch {
+        case e: Exception =>
+          logWarning("DDDDDD now spark user:" + sparkUser + ";auth user:" +
+            ss.getAuthenticator.getUserName)
+          throw new Exception("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
+      }
 
       if (authorizerV2 != null) {
         authorizerV2.checkPrivileges(hiveOp, inputsHObjs, outputHObjs, authzContextBuilder.build())

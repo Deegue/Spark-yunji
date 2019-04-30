@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <project name="maven-antrun-" default="main"  >
 <target name="main">
-  <mkdir dir="/Users/heguozi/Desktop/Projects/spark-origin/sql/hive-thriftserver/target/tmp"/>
+  <mkdir dir="/Users/heguozi/Desktop/yunji/Spark-yunji/sql/hive-thriftserver/target/tmp"/>
 </target>
 </project>
