@@ -230,13 +230,14 @@ private[hive] class HiveClientImpl(
     // don't execute privilege auth of hive admin user
     val adminUser = HiveConf.getVar(conf, HiveConf.ConfVars.USERS_IN_ADMIN_ROLE)
     val sparkUser = SparkSession.builder().getOrCreate().sparkContext.sparkUser
-    if (sparkUser != null && sparkUser.equalsIgnoreCase(adminUser)) {
+    logInfo("EEEEEE Spark UserName:" + sparkUser + ";adminUser:" + adminUser.toLowerCase)
+    if (sparkUser != null && adminUser.toLowerCase.contains(sparkUser.toLowerCase())) {
       logInfo("AAAAAA User of Admin.")
       return (true, "User of Admin.")
     }
 
     val prepareCommand = cmd.replaceAll("\\n", " ")
-    if (! needAuth(prepareCommand)) {
+    if (!needAuth(prepareCommand)) {
       logInfo("AAAAAA Don't need auth.")
       return (true, "Don't need auth.")
     }
