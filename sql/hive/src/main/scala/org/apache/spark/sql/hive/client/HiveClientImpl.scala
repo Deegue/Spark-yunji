@@ -233,12 +233,30 @@ private[hive] class HiveClientImpl(
     logInfo("EEEEEE Spark UserName:" + sparkUser + ";adminUser:" + adminUser.toLowerCase)
     if (sparkUser != null && adminUser.toLowerCase.contains(sparkUser.toLowerCase())) {
       logInfo("AAAAAA User of Admin.")
+      val originState = SessionState.get()
+      if (originState != null) {
+        val ss = SessionState.start(originState)
+        val confNew = ss.getConf
+        confNew.set("hive.security.authorization.enabled", "false")
+        confNew.set("hive.security.authorization.manager",
+          "org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider")
+        ss.setConf(confNew)
+      }
       return (true, "User of Admin.")
     }
 
     val prepareCommand = cmd.replaceAll("\\n", " ")
     if (!needAuth(prepareCommand)) {
       logInfo("AAAAAA Don't need auth.")
+      val originState = SessionState.get()
+      if (originState != null) {
+        val ss = SessionState.start(originState)
+        val confNew = ss.getConf
+        confNew.set("hive.security.authorization.enabled", "false")
+        confNew.set("hive.security.authorization.manager",
+          "org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider")
+        ss.setConf(confNew)
+      }
       return (true, "Don't need auth.")
     }
 
@@ -264,12 +282,11 @@ private[hive] class HiveClientImpl(
       confNew.set("hive.security.authorization.manager",
         "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd." +
           "SQLStdHiveAuthorizerFactory")
-//      confNew.set("hive.security.authenticator.manager",
-//        "org.apache.hadoop.hive.ql.security.SessionStateUserAuthenticator")
       ss.setConf(confNew)
       ss.setCurrentDatabase(currentDatabase)
       ss.initTxnMgr(ss.getConf)
       ss.setIsHiveServerQuery(true)
+      logWarning(s"FFFFFF isHiveServerQuery: ${ss.isHiveServerQuery}")
 
       val hiveCommand = new VariableSubstitution().substitute(conf, command)
       val ctx = new Context(ss.getConf)
