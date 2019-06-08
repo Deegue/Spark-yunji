@@ -188,7 +188,7 @@ public class YarnShuffleService extends AuxiliaryService {
       port = shuffleServer.getPort();
       boundPort = port;
       String authEnabledString = authEnabled ? "enabled" : "not enabled";
-      logger.info("Started YARN shuffle service for Spark on port {}. " +
+      logger.info("KKKKKK-Started YARN shuffle service for Spark on port {}. " +
         "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
         registeredExecutorFile);
     } catch (Exception e) {
@@ -286,13 +286,13 @@ public class YarnShuffleService extends AuxiliaryService {
   @Override
   public void initializeContainer(ContainerInitializationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.info("Initializing container {}", containerId);
+    logger.info("KKKKKK-Initializing container {}", containerId);
   }
 
   @Override
   public void stopContainer(ContainerTerminationContext context) {
     ContainerId containerId = context.getContainerId();
-    logger.info("Stopping container {}", containerId);
+    logger.info("KKKKKK-Stopping container {}", containerId);
   }
 
   /**
@@ -300,14 +300,18 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceStop() {
+    logger.info("SSSSSS-serviceStop");
     try {
       if (shuffleServer != null) {
+        logger.info("SSSSSS-shuffleServer-close");
         shuffleServer.close();
       }
       if (blockHandler != null) {
+        logger.info("SSSSSS-blockHandler-close");
         blockHandler.close();
       }
       if (db != null) {
+        logger.info("SSSSSS-db-close");
         db.close();
       }
     } catch (Exception e) {

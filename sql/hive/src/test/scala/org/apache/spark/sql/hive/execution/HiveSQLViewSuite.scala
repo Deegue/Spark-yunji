@@ -31,6 +31,8 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
   import testImplicits._
 
   test("create a permanent/temp view using a hive, built-in, and permanent user function") {
+    spark.sql("create table default.tt as select 1")
+    spark.sql("create table default.tt2 as select * from default.tt")
     val permanentFuncName = "myUpper"
     val permanentFuncClass =
       classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName

@@ -76,6 +76,8 @@ public class TransportServer implements Closeable {
       shouldClose = false;
     } finally {
       if (shouldClose) {
+        logger.warn("Is going to close TransportServer.");
+        this.close();
         JavaUtils.closeQuietly(this);
       }
     }
@@ -120,6 +122,15 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
+//    if (conf.enableTcpKeepAlive()) {
+    bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+    bootstrap.childOption(ChannelOption.AUTO_CLOSE, true);
+    logger.warn("SSSSSS enableTcpKeepAlive = true!");
+    logger.warn("SSSSSS ChannelOption.AUTO_CLOSE = true!");
+//    bootstrap.childOption(ChannelOption.SO_BACKLOG, 128);
+//    logger.warn("SSSSSS ChannelOption.SO_BACKLOG = 128!");
+//    }
+
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) {
@@ -149,6 +160,16 @@ public class TransportServer implements Closeable {
     if (channelFuture != null) {
       // close is a local operation and should finish within milliseconds; timeout just to be safe
       channelFuture.channel().close().awaitUninterruptibly(10, TimeUnit.SECONDS);
+
+      logger.info("PPPPPP-channelFuture.channel().isActive(): {}",
+              channelFuture.channel().isActive());
+      logger.info("PPPPPP-channelFuture.channel().isOpen(): {}",
+              channelFuture.channel().isOpen());
+      logger.info("PPPPPP-channelFuture.channel().isRegistered(): {}",
+              channelFuture.channel().isRegistered());
+      logger.info("PPPPPP-channelFuture.channel().isWritable(): {}",
+              channelFuture.channel().isWritable());
+
       channelFuture = null;
     }
     if (bootstrap != null && bootstrap.config().group() != null) {

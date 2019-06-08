@@ -316,43 +316,6 @@ private[hive] class HiveClientImpl(
       authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
       authzContextBuilder.setCommandString(command)
 
-//      val authenticator = HiveUtils.getAuthenticator(
-//        ss.getConf, HiveConf.ConfVars.HIVE_AUTHENTICATOR_MANAGER)
-//      authenticator.setSessionState(ss)
-//      ss.setAuthenticator(authenticator)
-//
-//      val authorizerFactory = HiveUtils.getAuthorizerFactory(
-//        ss.getConf, HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER)
-//      val authzSessionContextBuilder = new HiveAuthzSessionContext.Builder
-//      authzSessionContextBuilder.setClientType(CLIENT_TYPE.HIVESERVER2)
-//      authzSessionContextBuilder.setSessionString(ss.getSessionId)
-//
-//      //      val authorizerV2 = ss.getAuthorizerV2()
-//      val authorizerV2 = authorizerFactory.createHiveAuthorizer(
-//        new HiveMetastoreClientFactoryImpl,
-//        ss.getConf,
-//        ss.getAuthenticator,
-//        authzSessionContextBuilder.build)
-//
-//
-//      if (ss.getConf.get(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, "") != true.toString) {
-//        ss.getConf.setVar(ConfVars.METASTORE_FILTER_HOOK,
-//          "org.apache.hadoop.hive.ql.security.authorization.plugin." +
-//            "AuthorizationMetaStoreFilterHook")
-//        authorizerV2.applyAuthorizationConfigPolicy(conf)
-//        // update config in Hive thread local as well and init the metastore client
-//        try
-//          Hive.get(conf).getMSC
-//        catch {
-//          case e: Exception =>
-//            // catch-all due to some exec time dependencies on session state
-//            // that would cause ClassNoFoundException otherwise
-//            throw new HiveException(e.getMessage, e)
-//        }
-//        // set a marker that this conf has been processed.
-//        ss.getConf.set(CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER, true.toString)
-//      }
-
       logInfo("EEEEEE ss UserName:" + ss.getAuthenticator.getUserName +
         ";GroupName:" + ss.getAuthenticator.getGroupNames)
 
@@ -369,6 +332,7 @@ private[hive] class HiveClientImpl(
       }
 
       if (authorizerV2 != null) {
+        logInfo("FFFFFF CurrentRoles: " + authorizerV2.getCurrentRoleNames)
         authorizerV2.checkPrivileges(hiveOp, inputsHObjs, outputHObjs, authzContextBuilder.build())
       } else {
         logError("AAAAAA AuthorizerV2 is null")

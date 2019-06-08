@@ -4,7 +4,7 @@
 		module="old-deps_2.10"
 		revision="0.1-SNAPSHOT"
 		status="integration"
-		publication="20190403144121"
+		publication="20190531103550"
 	>
 		<description>
 		old-deps
@@ -34,14 +34,14 @@
 	<dependencies>
 		<dependency org="org.scala-lang" name="scala-compiler" rev="2.10.7" conf="scala-tool->default,optional(default)"/>
 		<dependency org="org.scala-lang" name="scala-library" rev="2.10.7" conf="scala-tool->default,optional(default)"/>
-		<dependency org="org.apache.spark" name="spark-core_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-graphx_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-mllib_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-mllib-local_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-launcher_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-sketch_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-sql_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-streaming_2.11" rev="2.3.0" conf="compile->default(compile)"/>
-		<dependency org="org.apache.spark" name="spark-streaming-kafka-0-10_2.11" rev="2.3.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-core_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-graphx_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-mllib_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-mllib-local_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-launcher_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-sketch_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-sql_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-streaming_2.11" rev="2.2.0" conf="compile->default(compile)"/>
+		<dependency org="org.apache.spark" name="spark-streaming-kafka-0-10_2.11" rev="2.2.0" conf="compile->default(compile)"/>
 	</dependencies>
 </ivy-module>

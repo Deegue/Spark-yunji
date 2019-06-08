@@ -136,6 +136,8 @@ public class TransportClient implements Closeable {
     if (logger.isDebugEnabled()) {
       logger.debug("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
     }
+    logger.info("Sending fetch chunk request {} to {}", chunkIndex, getRemoteAddress(channel));
+
 
     StreamChunkId streamChunkId = new StreamChunkId(streamId, chunkIndex);
     StdChannelListener listener = new StdChannelListener(streamChunkId) {
@@ -166,6 +168,7 @@ public class TransportClient implements Closeable {
     if (logger.isDebugEnabled()) {
       logger.debug("Sending stream request for {} to {}", streamId, getRemoteAddress(channel));
     }
+    logger.info("Sending stream request for {} to {}", streamId, getRemoteAddress(channel));
 
     // Need to synchronize here so that the callback is added to the queue and the RPC is
     // written to the socket atomically, so that callbacks are called in the right order
@@ -188,6 +191,7 @@ public class TransportClient implements Closeable {
     if (logger.isTraceEnabled()) {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
+    logger.info("Sending RPC to {}", getRemoteAddress(channel));
 
     long requestId = requestId();
     handler.addRpcRequest(requestId, callback);
@@ -217,6 +221,7 @@ public class TransportClient implements Closeable {
     if (logger.isTraceEnabled()) {
       logger.trace("Sending RPC to {}", getRemoteAddress(channel));
     }
+    logger.info("Sending RPC to {}", getRemoteAddress(channel));
 
     long requestId = requestId();
     handler.addRpcRequest(requestId, callback);
@@ -325,6 +330,9 @@ public class TransportClient implements Closeable {
           logger.trace("Sending request {} to {} took {} ms", requestId,
               getRemoteAddress(channel), timeTaken);
         }
+        long timeTaken = System.currentTimeMillis() - startTime;
+        logger.info("Sending request {} to {} took {} ms", requestId,
+                getRemoteAddress(channel), timeTaken);
       } else {
         String errorMsg = String.format("Failed to send RPC %s to %s: %s", requestId,
             getRemoteAddress(channel), future.cause());
