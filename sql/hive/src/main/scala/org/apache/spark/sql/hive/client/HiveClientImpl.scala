@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
+import java.util
 import java.util.{ArrayList => JArrayList}
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
@@ -28,6 +29,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
+import com.google.common.collect.Sets
 import org.antlr.runtime.NoViableAltException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -38,15 +40,16 @@ import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSche
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.exec.TableScanOperator
 import org.apache.hadoop.hive.ql.hooks.{Entity, ReadEntity, WriteEntity}
-import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, HiveUtils, Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyzerFactory}
+import org.apache.hadoop.hive.ql.metadata.{AuthorizationException, Hive, HiveException, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.optimizer.ppr.PartitionPruner
+import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
+import org.apache.hadoop.hive.ql.plan.HiveOperation
 import org.apache.hadoop.hive.ql.processors._
-import org.apache.hadoop.hive.ql.security.authorization.{AuthorizationUtils, HiveAuthorizationProvider}
+import org.apache.hadoop.hive.ql.security.authorization.AuthorizationUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin._
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveAuthzSessionContext.CLIENT_TYPE
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
 import org.apache.hadoop.hive.ql.session.SessionState
 
@@ -238,8 +241,8 @@ private[hive] class HiveClientImpl(
         val ss = SessionState.start(originState)
         val confNew = ss.getConf
         confNew.set("hive.security.authorization.enabled", "false")
-        confNew.set("hive.security.authorization.manager",
-          "org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider")
+//        confNew.set("hive.security.authorization.manager",
+//          "org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider")
         ss.setConf(confNew)
       }
       return (true, "User of Admin.")
@@ -253,8 +256,8 @@ private[hive] class HiveClientImpl(
         val ss = SessionState.start(originState)
         val confNew = ss.getConf
         confNew.set("hive.security.authorization.enabled", "false")
-        confNew.set("hive.security.authorization.manager",
-          "org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider")
+//        confNew.set("hive.security.authorization.manager",
+//          "org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider")
         ss.setConf(confNew)
       }
       return (true, "Don't need auth.")
@@ -279,9 +282,9 @@ private[hive] class HiveClientImpl(
       }
       val confNew = ss.getConf
       confNew.set("hive.security.authorization.enabled", "true")
-      confNew.set("hive.security.authorization.manager",
-        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd." +
-          "SQLStdHiveAuthorizerFactory")
+//      confNew.set("hive.security.authorization.manager",
+//        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd." +
+//          "SQLStdHiveAuthorizerFactory")
       ss.setConf(confNew)
       ss.setCurrentDatabase(currentDatabase)
       ss.initTxnMgr(ss.getConf)
@@ -316,29 +319,37 @@ private[hive] class HiveClientImpl(
       authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
       authzContextBuilder.setCommandString(command)
 
-      logInfo("EEEEEE ss UserName:" + ss.getAuthenticator.getUserName +
-        ";GroupName:" + ss.getAuthenticator.getGroupNames)
+      doAuthorization(sem, ss)
 
-      val authorizerV2 = ss.getAuthorizerV2
-      try {
-        authorizerV2.getCurrentRoleNames
-        logWarning("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
-      }
-      catch {
-        case e: Exception =>
-          logWarning("DDDDDD now spark user:" + sparkUser + ";auth user:" +
-            ss.getAuthenticator.getUserName)
-          throw new Exception("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
-      }
 
-      if (authorizerV2 != null) {
-        logInfo("FFFFFF CurrentRoles: " + authorizerV2.getCurrentRoleNames)
-        authorizerV2.checkPrivileges(hiveOp, inputsHObjs, outputHObjs, authzContextBuilder.build())
-      } else {
-        logError("AAAAAA AuthorizerV2 is null")
-      }
+//    ---------authorizerV2---------
+//      logInfo("EEEEEE ss UserName:" + ss.getAuthenticator.getUserName +
+//        ";GroupName:" + ss.getAuthenticator.getGroupNames)
+//
+//      val authorizerV2 = ss.getAuthorizerV2
+//      try {
+//        authorizerV2.getCurrentRoleNames
+//        logWarning("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
+//      }
+//      catch {
+//        case e: Exception =>
+//          logWarning("DDDDDD now spark user:" + sparkUser + ";auth user:" +
+//            ss.getAuthenticator.getUserName)
+//          throw new Exception("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
+//      }
+//
+//      if (authorizerV2 != null) {
+//        logInfo("FFFFFF CurrentRoles: " + authorizerV2.getCurrentRoleNames)
+//        authorizerV2.checkPrivileges(
+      // hiveOp, inputsHObjs, outputHObjs, authzContextBuilder.build())
+//      } else {
+//        logError("AAAAAA AuthorizerV2 is null")
+//      }
     } catch {
       case e: HiveAccessControlException =>
+        logWarning("AAAAAA No hive privilege, " + e.getMessage)
+        checkResult += e.getMessage
+      case e: AuthorizationException =>
         logWarning("AAAAAA No hive privilege, " + e.getMessage)
         checkResult += e.getMessage
       case e: NoViableAltException =>
@@ -349,6 +360,200 @@ private[hive] class HiveClientImpl(
       Thread.currentThread.setContextClassLoader(original)
     }
     (checkResult.isEmpty, checkResult.mkString(","))
+  }
+
+  /**
+   * Do authorization using post semantic analysis information in the semantic analyzer
+   * The original command is also passed so that authorization interface can provide
+   * more useful information in logs.
+   *
+   * @param sem SemanticAnalyzer used to parse input query
+   */
+  @throws[HiveException]
+  @throws[AuthorizationException]
+  def doAuthorization(sem: BaseSemanticAnalyzer, ss: SessionState): Unit = {
+    val op = ss.getHiveOperation
+    val db = sem.getDb
+    val additionalInputs = new util.HashSet[ReadEntity]
+    for (e <- sem.getInputs.asScala) {
+      if (e.getType eq Entity.Type.PARTITION) additionalInputs.add(new ReadEntity(e.getTable))
+    }
+    val additionalOutputs = new util.HashSet[WriteEntity]
+    for (e <- sem.getOutputs.asScala) {
+      if (e.getType eq Entity.Type.PARTITION) additionalOutputs.add(
+        new WriteEntity(e.getTable, WriteEntity.WriteType.DDL_NO_LOCK))
+    }
+    val inputs = Sets.union(sem.getInputs, additionalInputs)
+    val outputs = Sets.union(sem.getOutputs, additionalOutputs)
+    val authorizer = ss.getAuthorizer
+    if (op == HiveOperation.CREATEDATABASE) {
+      authorizer.authorize(op.getInputRequiredPrivileges, op.getOutputRequiredPrivileges)
+    } else if (op == HiveOperation.CREATETABLE_AS_SELECT ||
+      op == HiveOperation.CREATETABLE) {
+      authorizer.authorize(db.getDatabase(SessionState.get.getCurrentDatabase),
+        null, HiveOperation.CREATETABLE_AS_SELECT.getOutputRequiredPrivileges)
+    } else if (op == HiveOperation.IMPORT) {
+      val isa = sem.asInstanceOf[ImportSemanticAnalyzer]
+      if (!isa.existsTable) authorizer.authorize(
+        db.getDatabase(SessionState.get.getCurrentDatabase),
+        null, HiveOperation.CREATETABLE_AS_SELECT.getOutputRequiredPrivileges)
+    }
+
+    if (outputs != null && outputs.size > 0) {
+      for (write <- outputs.asScala) {
+        if (write.isDummy || write.isPathType) {
+
+        } else {
+          if (write.getType eq Entity.Type.DATABASE) {
+            if (!(op == HiveOperation.IMPORT)) {
+              authorizer.authorize(write.getDatabase, null, op.getOutputRequiredPrivileges)
+            }
+          } else {
+            var a = 0
+            if (write.getType eq Entity.Type.PARTITION) {
+              val part = db.getPartition(write.getTable, write.getPartition.getSpec, false)
+              if (part != null) {
+                authorizer.authorize(write.getPartition, null, op.getOutputRequiredPrivileges)
+                a = 1
+              }
+            }
+            if (a == 0 && write.getTable != null) {
+              authorizer.authorize(write.getTable, null, op.getOutputRequiredPrivileges)
+            }
+          }
+        }
+      }
+    }
+
+    if (inputs != null && inputs.size > 0) {
+      val tab2Cols = new util.HashMap[
+        org.apache.hadoop.hive.ql.metadata.Table, util.List[String]]
+      val part2Cols = new util.HashMap[
+        org.apache.hadoop.hive.ql.metadata.Partition, util.List[String]]
+      val tableUsePartLevelAuth = new util.HashMap[String, Boolean]
+      for (read <- inputs.asScala) {
+        if (read.isDummy || read.isPathType || (read.getType eq Entity.Type.DATABASE)) {
+
+        } else {
+          val tbl = read.getTable
+          if ((read.getPartition != null) || (tbl != null && tbl.isPartitioned)) {
+            val tblName = tbl.getTableName
+            if (tableUsePartLevelAuth.get(tblName) == null) {
+              val usePartLevelPriv =
+                tbl.getParameters.get("PARTITION_LEVEL_PRIVILEGE") != null &&
+                  "TRUE".equalsIgnoreCase(tbl.getParameters.get("PARTITION_LEVEL_PRIVILEGE"))
+              if (usePartLevelPriv) tableUsePartLevelAuth.put(tblName, true)
+              else tableUsePartLevelAuth.put(tblName, false)
+            }
+          }
+        }
+      }
+      getTablePartitionUsedColumns(op, sem, tab2Cols, part2Cols, tableUsePartLevelAuth)
+      // cache the results for table authorization
+      val tableAuthChecked = new util.HashSet[String]
+      for (read <- inputs.asScala) {
+        if (read.isDummy || read.isPathType) {
+
+        } else {
+          if (read.getType eq Entity.Type.DATABASE) {
+            authorizer.authorize(read.getDatabase, op.getInputRequiredPrivileges, null)
+          } else {
+            var a = 0
+            var tbl = read.getTable
+            if (read.getPartition != null) {
+              val partition = read.getPartition
+              tbl = partition.getTable
+              // use partition level authorization
+              if (tableUsePartLevelAuth.get(tbl.getTableName)) {
+                val cols = part2Cols.get(partition)
+                if (cols != null && cols.size > 0) {
+                  authorizer.authorize(
+                    partition.getTable, partition, cols, op.getInputRequiredPrivileges, null)
+                } else {
+                  authorizer.authorize(partition, op.getInputRequiredPrivileges, null)
+                }
+                a = 1
+              }
+            }
+            // if we reach here, it means it needs to do a table authorization
+            // check, and the table authorization may already happened because of other
+            // partitions
+            if (a == 0 && tbl != null && !tableAuthChecked.contains(tbl.getTableName)
+              && !tableUsePartLevelAuth.get(tbl.getTableName)) {
+              val cols = tab2Cols.get(tbl)
+              if (cols != null && cols.size > 0) {
+                authorizer.authorize(tbl, null, cols, op.getInputRequiredPrivileges, null)
+              }
+              else {
+                authorizer.authorize(tbl, op.getInputRequiredPrivileges, null)
+              }
+              tableAuthChecked.add(tbl.getTableName)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @throws[HiveException]
+  private def getTablePartitionUsedColumns(op: HiveOperation,
+                                           sem: BaseSemanticAnalyzer,
+                                           tab2Cols:
+                                           util.Map[org.apache.hadoop.hive.ql.metadata.Table,
+                                             util.List[String]],
+                                           part2Cols:
+                                           util.Map[org.apache.hadoop.hive.ql.metadata.Partition,
+                                             util.List[String]],
+                                           tableUsePartLevelAuth: util.Map[String, Boolean])
+  : Unit = { // for a select or create-as-select query, populate the partition to column
+    // (par2Cols) or
+    // table to columns mapping (tab2Cols)
+    if (op == HiveOperation.CREATETABLE_AS_SELECT || op == HiveOperation.QUERY) {
+      val querySem = sem.asInstanceOf[SemanticAnalyzer]
+      val parseCtx = querySem.getParseContext
+      for (topOpMap <- querySem.getParseContext.getTopOps.entrySet.asScala) {
+        val topOp = topOpMap.getValue
+        if (topOp.isInstanceOf[TableScanOperator]) {
+          val tableScanOp = topOp.asInstanceOf[TableScanOperator]
+          val tbl = tableScanOp.getConf.getTableMetadata
+          val neededColumnIds = tableScanOp.getNeededColumnIDs
+          val columns = tbl.getCols
+          val cols = new util.ArrayList[String]
+          var i = 0
+          while ( {
+            i < neededColumnIds.size
+          }) {
+            cols.add(columns.get(neededColumnIds.get(i)).getName)
+
+            {
+              i += 1
+              i - 1
+            }
+          }
+
+          // map may not contain all sources, since input list may have been optimized out
+          // or non-existent tho such sources may still be referenced by the TableScanOperator
+          // if it's null then the partition probably doesn't exist so let's use table permission
+          if (tbl.isPartitioned && tableUsePartLevelAuth.get(tbl.getTableName)) {
+            val alias_id = topOpMap.getKey
+            val partsList = PartitionPruner.prune(tableScanOp, parseCtx, alias_id)
+            val parts = partsList.getPartitions
+            for (part <- parts.asScala) {
+              var existingCols = part2Cols.get(part)
+              if (existingCols == null) existingCols = new util.ArrayList[String]
+              existingCols.addAll(cols)
+              part2Cols.put(part, existingCols)
+            }
+          }
+          else {
+            var existingCols = tab2Cols.get(tbl)
+            if (existingCols == null) existingCols = new util.ArrayList[String]
+            existingCols.addAll(cols)
+            tab2Cols.put(tbl, existingCols)
+          }
+        }
+      }
+    }
   }
 
   def preprocessCommand(command: String): String = {
