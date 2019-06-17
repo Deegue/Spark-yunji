@@ -639,7 +639,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    logWarning("AAAAAA Will execute SQL.(before auth) ")
+    logWarning("AAAAAA Using hive authorizerV1.(before auth) ")
     val (isAuth, authString) = sessionState.authSQL(sqlText)
     if (isAuth) {
       logWarning("BBBBBB Auth successfully!")
