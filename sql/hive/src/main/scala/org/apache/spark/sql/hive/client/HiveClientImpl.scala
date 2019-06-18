@@ -228,7 +228,7 @@ private[hive] class HiveClientImpl(
 
   override def auth(cmd: String, currentDatabase: String): (Boolean, String) = {
     val checkResult = new ListBuffer[String]()
-
+    logInfo("SSSSSS No use currentDatabase:" + currentDatabase)
     logInfo("AAAAAA Enter auth.")
     // don't execute privilege auth of hive admin user
     val adminUser = HiveConf.getVar(conf, HiveConf.ConfVars.USERS_IN_ADMIN_ROLE)
@@ -286,8 +286,8 @@ private[hive] class HiveClientImpl(
 //        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd." +
 //          "SQLStdHiveAuthorizerFactory")
       ss.setConf(confNew)
-      ss.setCurrentDatabase(currentDatabase)
-      ss.initTxnMgr(ss.getConf)
+//      ss.setCurrentDatabase(currentDatabase)
+//      ss.initTxnMgr(ss.getConf)
       ss.setIsHiveServerQuery(true)
       logWarning(s"FFFFFF isHiveServerQuery: ${ss.isHiveServerQuery}")
 
@@ -304,20 +304,20 @@ private[hive] class HiveClientImpl(
       logInfo("AAAAAA Semantic Analysis Completed")
       // validate the plan
       sem.validate()
-      val inputs = sem.getInputs
-      val outputs = sem.getOutputs
-      logInfo("CCCCCC Inputs:" + inputs)
-      logInfo("CCCCCC Outputs" + outputs)
+//      val inputs = sem.getInputs
+//      val outputs = sem.getOutputs
+//      logInfo("CCCCCC Inputs:" + inputs)
+//      logInfo("CCCCCC Outputs" + outputs)
 
-      val hiveOperation = ss.getHiveOperation
-      logInfo("AAAAAA HiveOperation:" + hiveOperation)
-
-      val hiveOp = HiveOperationType.valueOf(hiveOperation.name())
-      val inputsHObjs = getHivePrivObjects(inputs, hiveOp, true)
-      val outputHObjs = getHivePrivObjects(outputs, hiveOp, false)
-      val authzContextBuilder = new HiveAuthzContext.Builder()
-      authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
-      authzContextBuilder.setCommandString(command)
+//      val hiveOperation = ss.getHiveOperation
+//      logInfo("AAAAAA HiveOperation:" + hiveOperation)
+//
+//      val hiveOp = HiveOperationType.valueOf(hiveOperation.name())
+//      val inputsHObjs = getHivePrivObjects(inputs, hiveOp, true)
+//      val outputHObjs = getHivePrivObjects(outputs, hiveOp, false)
+//      val authzContextBuilder = new HiveAuthzContext.Builder()
+//      authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
+//      authzContextBuilder.setCommandString(command)
 
       doAuthorization(sem, ss)
 
@@ -346,9 +346,9 @@ private[hive] class HiveClientImpl(
 //        logError("AAAAAA AuthorizerV2 is null")
 //      }
     } catch {
-      case e: HiveAccessControlException =>
-        logWarning("AAAAAA No hive privilege, " + e.getMessage)
-        checkResult += e.getMessage
+//      case e: HiveAccessControlException =>
+//        logWarning("AAAAAA No hive privilege, " + e.getMessage)
+//        checkResult += e.getMessage
       case e: AuthorizationException =>
         logWarning("AAAAAA No hive privilege, " + e.getMessage)
         checkResult += e.getMessage
@@ -373,6 +373,7 @@ private[hive] class HiveClientImpl(
   @throws[AuthorizationException]
   def doAuthorization(sem: BaseSemanticAnalyzer, ss: SessionState): Unit = {
     val op = ss.getHiveOperation
+    logInfo("AAAAAA HiveOperation:" + op)
     val db = sem.getDb
     val additionalInputs = new util.HashSet[ReadEntity]
     for (e <- sem.getInputs.asScala) {
@@ -385,6 +386,8 @@ private[hive] class HiveClientImpl(
     }
     val inputs = Sets.union(sem.getInputs, additionalInputs)
     val outputs = Sets.union(sem.getOutputs, additionalOutputs)
+    logInfo("CCCCCC Inputs:" + inputs)
+    logInfo("CCCCCC Outputs" + outputs)
     val authorizer = ss.getAuthorizer
     if (op == HiveOperation.CREATEDATABASE) {
       authorizer.authorize(op.getInputRequiredPrivileges, op.getOutputRequiredPrivileges)
