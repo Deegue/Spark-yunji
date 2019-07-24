@@ -283,6 +283,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CONVERT_GROUPING_ID_ENABLED = buildConf("spark.sql.convertGroupingId.enabled")
+    .internal()
+    .doc("Whether enable convert grouping__id to grouping_id() or not. ")
+    .booleanConf
+    .createWithDefault(false)
+
   val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
     .internal()
     .doc("When true, the query optimizer will infer and propagate data constraints in the query " +
@@ -611,6 +617,12 @@ object SQLConf {
     .doc("The number of SQL client sessions kept in the JDBC/ODBC web UI history.")
     .intConf
     .createWithDefault(200)
+
+  val THRIFTSERVER_HDFS_DISABLE_CACHE = buildConf("spark.sql.thriftserver.hdfs.disable.cache")
+    .doc("Whether disable FileSystem connection cache of HDFS. When true, it will fix " +
+      "`FileSystem Closed` exception when using CTAS. See [SPARK-21067] for details.")
+    .booleanConf
+    .createWithDefault(false)
 
   // This is used to set the default data source
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
@@ -1713,6 +1725,8 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
+  def convertGroupingIdEnabled: Boolean = getConf(SQLConf.CONVERT_GROUPING_ID_ENABLED)
+
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
@@ -1833,6 +1847,8 @@ class SQLConf extends Serializable with Logging {
 
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
+
+  def thriftServerHdfsDisableCache: Boolean = getConf(THRIFTSERVER_HDFS_DISABLE_CACHE)
 
   def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 

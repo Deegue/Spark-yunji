@@ -51,6 +51,10 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       sparkContext.hadoopConfiguration.addResource(configFile)
     }
 
+    if (sparkContext.conf.getBoolean("spark.sql.thriftserver.hdfs.disable.cache", false)) {
+      sparkContext.hadoopConfiguration.setBoolean("fs.hdfs.impl.disable.cache", true)
+    }
+
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkContext.conf.remove("hive.metastore.warehouse.dir")
     // Set the Hive metastore warehouse path to the one we use
