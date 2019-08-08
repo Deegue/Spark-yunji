@@ -640,7 +640,7 @@ class SparkSession private(
    */
   def sql(sqlText: String): DataFrame = {
     logInfo("AAAAAA Using hive authorizerV1.(before auth) ")
-    if (sparkContext.getConf.getBoolean("spark.hive.auth.enable", true)) {
+    if (sparkContext.getConf.get("spark.sql.hive.auth.enable", "true").equals("true")) {
       val (isAuth, authString) = sessionState.authSQL(sqlText)
       if (isAuth) {
         logInfo("BBBBBB Auth successfully!")
@@ -649,7 +649,7 @@ class SparkSession private(
         throw new Exception(authString)
       }
     } else {
-      logInfo("AAAAAA spark.hive.auth.enable=false")
+      logInfo("AAAAAA spark.sql.hive.auth.enable=false")
     }
     logInfo("AAAAAA Will execute SQL.(after auth) ")
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))

@@ -46,7 +46,7 @@ package object config {
     .doc("The amount of off-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
-    .createOptional
+    .createWithDefault(2048)
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
@@ -96,7 +96,7 @@ package object config {
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
-    .createOptional
+    .createWithDefault(5120)
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
@@ -553,7 +553,7 @@ package object config {
   private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
     .doc("Size limit for results.")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefaultString("1g")
+    .createWithDefaultString("4g")
 
   private[spark] val CREDENTIALS_RENEWAL_INTERVAL_RATIO =
     ConfigBuilder("spark.security.credentials.renewalRatio")

@@ -245,18 +245,18 @@ object SQLConf {
   val SHUFFLE_PARTITIONS = buildConf("spark.sql.shuffle.partitions")
     .doc("The default number of partitions to use when shuffling data for joins or aggregations.")
     .intConf
-    .createWithDefault(200)
+    .createWithDefault(500)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
       .doc("The target post-shuffle input size in bytes of a task.")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(64 * 1024 * 1024)
+      .createWithDefault(128 * 1024 * 1024)
 
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
     buildConf("spark.sql.adaptive.minNumPostShufflePartitions")
@@ -667,7 +667,7 @@ object SQLConf {
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
