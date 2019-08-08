@@ -603,7 +603,7 @@ private[hive] class HiveClientImpl(
     var needAuth = true
 
     try {
-      val maxPrefixLength = 100
+      val maxPrefixLength = 20
       val prefixLen = if (command.length > maxPrefixLength) {
         maxPrefixLength // the value doesn't have special meaning
       } else {
@@ -638,7 +638,7 @@ private[hive] class HiveClientImpl(
     } catch {
       case e: Exception =>
         needAuth = false
-        e.printStackTrace()
+        logInfo("AAAAAA SQL don't need auth.")
     }
 
     return needAuth

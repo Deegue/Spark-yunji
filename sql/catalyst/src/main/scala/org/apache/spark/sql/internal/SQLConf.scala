@@ -753,6 +753,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val HIVE_AUTH_ENABLE = buildConf("spark.sql.hive.auth.enable")
+    .doc("Whether to use Hive authentication before executing Spark SQL.")
+    .booleanConf
+    .createWithDefault(true)
+
   val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
     buildConf("spark.sql.codegen.useIdInClassName")
     .internal()

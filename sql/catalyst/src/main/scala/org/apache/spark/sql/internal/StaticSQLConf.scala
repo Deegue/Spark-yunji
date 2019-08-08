@@ -98,12 +98,6 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val HIVE_AUTH_ENABLE =
-    buildStaticConf("spark.sql.hive.auth.enable")
-      .doc("Whether to use Hive authentication before executing Spark SQL.")
-      .booleanConf
-      .createWithDefault(true)
-
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("Name of the class used to configure Spark Session extensions. The class should " +
       "implement Function1[SparkSessionExtension, Unit], and must have a no-args constructor.")

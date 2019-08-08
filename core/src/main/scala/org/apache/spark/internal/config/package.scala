@@ -46,7 +46,7 @@ package object config {
     .doc("The amount of off-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
-    .createWithDefault(2048)
+    .createOptional
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
@@ -96,7 +96,7 @@ package object config {
     .doc("The amount of off-heap memory to be allocated per executor in cluster mode, " +
       "in MiB unless otherwise specified.")
     .bytesConf(ByteUnit.MiB)
-    .createWithDefault(5120)
+    .createOptional
 
   private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
