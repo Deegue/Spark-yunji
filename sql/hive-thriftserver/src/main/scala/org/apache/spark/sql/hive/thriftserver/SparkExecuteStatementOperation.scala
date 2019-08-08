@@ -76,6 +76,11 @@ private[hive] class SparkExecuteStatementOperation(
     sqlContext.sparkContext.clearJobGroup()
   }
 
+  override def getStatementId: String = {
+    logInfo("AAAAAA getStatementId:" + statementId)
+    statementId
+  }
+
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
     dataTypes(ordinal) match {
       case StringType =>

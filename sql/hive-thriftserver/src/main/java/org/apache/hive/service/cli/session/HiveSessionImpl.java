@@ -784,7 +784,11 @@ public class HiveSessionImpl implements HiveSession {
       if (fetchType == FetchType.QUERY_OUTPUT) {
         return operationManager.getOperationNextRowSet(opHandle, orientation, maxRows);
       }
+
       return operationManager.getOperationLogRowSet(opHandle, orientation, maxRows);
+
+//      LOG.info("AAAAAA fetchResults!!! opHandle:" + opHandle);
+//      return operationManager.getQueryLog(opHandle, orientation, maxRows);
     } finally {
       release(true);
     }

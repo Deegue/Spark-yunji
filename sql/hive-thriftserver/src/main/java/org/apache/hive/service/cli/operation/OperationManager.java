@@ -42,6 +42,7 @@ import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.log4j.Appender;
 import org.apache.log4j.Logger;
+import org.apache.spark.sql.hive.thriftserver.SparkHiveLog;
 
 /**
  * OperationManager.
@@ -244,6 +245,46 @@ public class OperationManager extends AbstractService {
     for (String log : logs) {
       rowSet.addRow(new String[] {log});
     }
+
+    return rowSet;
+  }
+
+  public RowSet getQueryLog(OperationHandle opHandle,
+      FetchOrientation orientation, long maxRows) throws HiveSQLException {
+
+    // get the OperationLog object from the operation
+    OperationLog operationLog = getOperation(opHandle).getOperationLog();
+    if (operationLog == null) {
+      throw new HiveSQLException("Couldn't find log associated with operation handle: " + opHandle);
+    }
+
+    // read logs
+    List<String> logs;
+    try {
+      logs = operationLog.readOperationLog(isFetchFirst(orientation), maxRows);
+    } catch (SQLException e) {
+      throw new HiveSQLException(e.getMessage(), e.getCause());
+    }
+
+    Operation operation = handleToOperation.get(opHandle);
+    String groupId = operation.getStatementId();
+
+    Schema schema = new Schema();
+    FieldSchema fieldSchema = new FieldSchema();
+    fieldSchema.setName("operation_log");
+    fieldSchema.setType("string");
+    schema.addToFieldSchemas(fieldSchema);
+    TableSchema tableSchema = new TableSchema(schema);
+
+    RowSet rowSet = null;
+    try {
+      rowSet = RowSetFactory.create(tableSchema, getOperation(opHandle).getProtocolVersion());
+      rowSet.addRow(new String[] {SparkHiveLog.getSparkHiveLog().getLogInfo(groupId)});
+    } catch (HiveSQLException e) {
+      e.printStackTrace();
+    }
+
+    LOG.info("AAAAAA getQueryLog!!! rowSet:" + rowSet);
 
     return rowSet;
   }

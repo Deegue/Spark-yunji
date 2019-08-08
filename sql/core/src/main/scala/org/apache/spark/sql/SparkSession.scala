@@ -639,15 +639,19 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    logWarning("AAAAAA Using hive authorizerV1.(before auth) ")
-    val (isAuth, authString) = sessionState.authSQL(sqlText)
-    if (isAuth) {
-      logWarning("BBBBBB Auth successfully!")
+    logInfo("AAAAAA Using hive authorizerV1.(before auth) ")
+    if (sparkContext.getConf.getBoolean("spark.hive.auth.enable", true)) {
+      val (isAuth, authString) = sessionState.authSQL(sqlText)
+      if (isAuth) {
+        logInfo("BBBBBB Auth successfully!")
+      } else {
+        logInfo("BBBBBB Auth failed!!!" + authString)
+        throw new Exception(authString)
+      }
     } else {
-      logWarning("BBBBBB Auth failed!!!" + authString)
-      throw new Exception(authString)
+      logInfo("AAAAAA spark.hive.auth.enable=false")
     }
-    logWarning("AAAAAA Will execute SQL.(after auth) ")
+    logInfo("AAAAAA Will execute SQL.(after auth) ")
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
   }
 

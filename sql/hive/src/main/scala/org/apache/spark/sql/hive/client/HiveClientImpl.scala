@@ -289,7 +289,7 @@ private[hive] class HiveClientImpl(
 //      ss.setCurrentDatabase(currentDatabase)
 //      ss.initTxnMgr(ss.getConf)
       ss.setIsHiveServerQuery(true)
-      logWarning(s"FFFFFF isHiveServerQuery: ${ss.isHiveServerQuery}")
+      logInfo(s"FFFFFF isHiveServerQuery: ${ss.isHiveServerQuery}")
 
       val hiveCommand = new VariableSubstitution().substitute(conf, command)
       val ctx = new Context(ss.getConf)
@@ -329,11 +329,11 @@ private[hive] class HiveClientImpl(
 //      val authorizerV2 = ss.getAuthorizerV2
 //      try {
 //        authorizerV2.getCurrentRoleNames
-//        logWarning("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
+//        logInfo("DDDDDD authorizerV2.getCurrentRoleNames is not null!")
 //      }
 //      catch {
 //        case e: Exception =>
-//          logWarning("DDDDDD now spark user:" + sparkUser + ";auth user:" +
+//          logInfo("DDDDDD now spark user:" + sparkUser + ";auth user:" +
 //            ss.getAuthenticator.getUserName)
 //          throw new Exception("DDDDDD authorizerV2.getCurrentRoleNames is null!!!")
 //      }
@@ -347,15 +347,15 @@ private[hive] class HiveClientImpl(
 //      }
     } catch {
 //      case e: HiveAccessControlException =>
-//        logWarning("AAAAAA No hive privilege, " + e.getMessage)
+//        logInfo("AAAAAA No hive privilege, " + e.getMessage)
 //        checkResult += e.getMessage
       case e: AuthorizationException =>
-        logWarning("AAAAAA No hive privilege, " + e.getMessage)
+        logInfo("AAAAAA No hive privilege, " + e.getMessage)
         checkResult += e.getMessage
       case e: NoViableAltException =>
-        logWarning("AAAAAA Authorize hive privilege failed, ", e)
+        logInfo("AAAAAA Authorize hive privilege failed, ", e)
       case e@ (_: Exception | _: Throwable | _: Error) =>
-        logWarning("AAAAAA Authorize hive privilege failed, ", e)
+        logInfo("AAAAAA Authorize hive privilege failed, ", e)
     } finally {
       Thread.currentThread.setContextClassLoader(original)
     }
@@ -586,7 +586,7 @@ private[hive] class HiveClientImpl(
       viewCache.put(globalViewName, globalViewDef)
       globalViewDef
     } else {
-      logWarning("AAAAAA there is no matcher which is need to process")
+      logInfo("AAAAAA there is no matcher which is need to process")
       for (view <- viewCache.asScala.keySet) {
         if (processCmd.contains(view)) {
           val viewDef = viewCache.get(view)
@@ -600,39 +600,45 @@ private[hive] class HiveClientImpl(
 
   def needAuth(command: String): Boolean = {
     logInfo("AAAAAA Enter needAuth.")
-
     var needAuth = true
-    val maxPrefixLength = 100
-    val prefixLen = if (command.length > maxPrefixLength) {
-      maxPrefixLength // the value doesn't have special meaning
-    } else {
-      command.length
-    }
-    val prefixCmd = command.trim.substring(0, prefixLen).toLowerCase()
-    val dropTempViewMatcher = dropTempViewPattern.matcher(command)
 
-    if (prefixCmd.startsWith("show ")) {
-      needAuth = false
-    } else if (prefixCmd.startsWith("add ")) {
-      needAuth = false
-    } else if (prefixCmd.startsWith("reset ")) {
-      needAuth = false
-    } else if (prefixCmd.startsWith("set ")) {
-      needAuth = false
-    } else if (prefixCmd.startsWith("describe ")) {
-      needAuth = false
-    } else if (prefixCmd.startsWith("explain")) {
-      needAuth = false
-    } else if (prefixCmd.startsWith("uncache ")) {
-      needAuth = false
-    } else if (dropTempViewMatcher.find()) {
-      val viewName = dropTempViewMatcher.group(1)
-      if (viewCache.contains(viewName)) {
-        viewCache.remove(viewName)
-        needAuth = false
+    try {
+      val maxPrefixLength = 100
+      val prefixLen = if (command.length > maxPrefixLength) {
+        maxPrefixLength // the value doesn't have special meaning
+      } else {
+        command.length
       }
-    } else {
-      needAuth = true
+      val prefixCmd = command.trim.substring(0, prefixLen - 1).toLowerCase()
+      val dropTempViewMatcher = dropTempViewPattern.matcher(command)
+
+      if (prefixCmd.startsWith("show ")) {
+        needAuth = false
+      } else if (prefixCmd.startsWith("add ")) {
+        needAuth = false
+      } else if (prefixCmd.startsWith("reset ")) {
+        needAuth = false
+      } else if (prefixCmd.startsWith("set ")) {
+        needAuth = false
+      } else if (prefixCmd.startsWith("describe ")) {
+        needAuth = false
+      } else if (prefixCmd.startsWith("explain")) {
+        needAuth = false
+      } else if (prefixCmd.startsWith("uncache ")) {
+        needAuth = false
+      } else if (dropTempViewMatcher.find()) {
+        val viewName = dropTempViewMatcher.group(1)
+        if (viewCache.contains(viewName)) {
+          viewCache.remove(viewName)
+          needAuth = false
+        }
+      } else {
+        needAuth = true
+      }
+    } catch {
+      case e: Exception =>
+        needAuth = false
+        e.printStackTrace()
     }
 
     return needAuth

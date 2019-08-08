@@ -23,6 +23,7 @@ import java.util.EnumSet;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -178,6 +179,8 @@ public abstract class Operation {
   public boolean isFailed() {
     return OperationState.ERROR.equals(state);
   }
+
+  public String getStatementId() {return StringUtils.EMPTY;}
 
   protected void createOperationLog() {
     if (parentSession.isOperationLogEnabled()) {

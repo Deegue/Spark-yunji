@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver.server
 import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
@@ -27,7 +28,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation}
+import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation, SparkHiveLog}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -69,5 +70,36 @@ private[thriftserver] class SparkSQLOperationManager()
       val kv = iterator.next()
       conf.setConfString(kv.getKey, kv.getValue)
     }
+  }
+
+//  override def getQueryLog(opHandle: OperationHandle): RowSet = {
+//
+//    val operation = handleToOperation.get(opHandle)
+//    val groupId = operation.getStatementId
+//
+//    val schema = new Schema
+//    val fieldSchema = new FieldSchema
+//    fieldSchema.setName("operation_log")
+//    fieldSchema.setType("string")
+//    schema.addToFieldSchemas(fieldSchema)
+//    val tableSchema = new TableSchema(schema)
+//
+//    val rowSet = RowSetFactory.create(tableSchema, getOperation(opHandle).getProtocolVersion)
+//    rowSet.addRow(Array(SparkHiveLog.getSparkHiveLog().getLogInfo(groupId)))
+//
+//    logInfo("AAAAAA getQueryLog!!! rowSet:" + rowSet)
+//
+//    rowSet
+//  }
+
+  override def closeOperation(opHandle: OperationHandle): Unit = {
+
+    val operation = handleToOperation.get(opHandle)
+    val groupId = operation.getStatementId
+    logInfo("AAAAAA closeOperation!!! opHandle:" + opHandle)
+
+    SparkHiveLog.getSparkHiveLog().clearCaches(groupId)
+    operation.close()
+    handleToOperation.remove(opHandle)
   }
 }
