@@ -397,6 +397,13 @@ private[spark] class AppStatusStore(
       .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
   }
 
+  def executorSummary(
+      stageId: Int, attemptId: Int, maxTasks: Int): Map[String, v1.ExecutorStageSummary] = {
+    val stageKey = Array(stageId, attemptId)
+    store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
+      .max(maxTasks).asScala.map { exec => (exec.executorId -> exec.info) }.toMap
+  }
+
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
     store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
       !cachedOnly || rdd.numCachedPartitions > 0
@@ -416,7 +423,12 @@ private[spark] class AppStatusStore(
   }
 
   private def stageWithDetails(stage: v1.StageData): v1.StageData = {
-    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
+//    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
+//      .map { t => (t.taskId, t) }
+//      .toMap
+
+    // 控制通过Spark UI API获取stage信息时，返回的task数量不能太多
+    val tasks = taskList(stage.stageId, stage.attemptId, 1)
       .map { t => (t.taskId, t) }
       .toMap
 
@@ -453,6 +465,7 @@ private[spark] class AppStatusStore(
       stage.rddIds,
       stage.accumulatorUpdates,
       Some(tasks),
+//      Some(executorSummary(stage.stageId, stage.attemptId, 1)), 也可以限制executor返回信息数量
       Some(executorSummary(stage.stageId, stage.attemptId)),
       stage.killedTasksSummary)
   }
