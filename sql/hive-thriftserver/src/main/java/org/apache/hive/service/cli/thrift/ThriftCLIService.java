@@ -20,6 +20,7 @@ package org.apache.hive.service.cli.thrift;
 
 import javax.security.auth.login.LoginException;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.HashMap;
@@ -38,6 +39,8 @@ import org.apache.hive.service.auth.TSetIpAddressProcessor;
 import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.hive.service.server.HiveServer2;
+import org.apache.spark.sql.hive.client.HiveClientCache;
+import org.apache.spark.sql.hive.client.HiveClientImpl;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
@@ -340,7 +343,12 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
    */
   SessionHandle getSessionHandle(TOpenSessionReq req, TOpenSessionResp res)
       throws HiveSQLException, LoginException, IOException {
-    String userName = getUserName(req);
+    String userName2 = getUserName(req);
+    String userName = "root";
+    LOG.warn("KKKKKK 设置SessionHandle user为root");
+    LOG.warn("KKKKKK 正常用户为:" + userName2);
+    HiveClientCache.userNameCache = userName2;
+    LOG.warn("KKKKKK 修改后用户为:" + HiveClientCache.userNameCache);
     String ipAddress = getIpAddress();
     TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION,
         req.getClient_protocol());

@@ -389,6 +389,17 @@ private[hive] class HiveClientImpl(
     logInfo("CCCCCC Inputs:" + inputs)
     logInfo("CCCCCC Outputs" + outputs)
     val authorizer = ss.getAuthorizer
+    val authenticator = authorizer.getAuthenticator
+    logWarning("KKKKKK Authenticator.getUserName1" + authenticator.getUserName)
+    logWarning("KKKKKK Authenticator.getGroupNames1" + authenticator.getGroupNames)
+    logWarning("KKKKKK Authenticator.getClass" + authenticator.getClass)
+    logWarning("KKKKKK HiveClientImpl.userNameCache" + HiveClientCache.userNameCache)
+    val userNameField = authenticator.getClass.getDeclaredField("userName")
+    userNameField.setAccessible(true)
+    userNameField.set(authenticator, HiveClientCache.userNameCache)
+    logWarning("KKKKKK Authenticator.getUserName2" + authenticator.getUserName)
+    logWarning("KKKKKK Authenticator.getGroupNames2" + authenticator.getGroupNames)
+
     if (op == HiveOperation.CREATEDATABASE) {
       authorizer.authorize(op.getInputRequiredPrivileges, op.getOutputRequiredPrivileges)
     } else if (op == HiveOperation.CREATETABLE_AS_SELECT ||
