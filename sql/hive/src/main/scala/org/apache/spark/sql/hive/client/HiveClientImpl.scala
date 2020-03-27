@@ -272,14 +272,19 @@ private[hive] class HiveClientImpl(
     val original = Thread.currentThread().getContextClassLoader
     try {
       Thread.currentThread.setContextClassLoader(clientLoader.classLoader)
-      val originState = SessionState.get()
-      val ss = if (originState != null) {
+      val originState = state
+      val ss = if (originState != null && originState.getTxnMgr != null) {
         logInfo("AAAAAA Start SessionState from current SessionState")
         SessionState.start(originState)
       } else {
-        logInfo("AAAAAA Start a new SessionState")
-        SessionState.start(state.getConf)
+        logInfo("AAAAAA Start a new SessionState ")
+        SessionState.start(newState())
       }
+      SessionState.get.initTxnMgr(conf)
+      logInfo("SSSSSS:SessionState.get:" + SessionState.get)
+      logInfo("SSSSSS:SessionState.get.getTxnMgr:" + SessionState.get.getTxnMgr)
+      logInfo("SSSSSS:SessionState.get.getTxnMgr.supportsAcid:"
+        + SessionState.get.getTxnMgr.supportsAcid)
       val confNew = ss.getConf
       confNew.set("hive.security.authorization.enabled", "true")
 //      confNew.set("hive.security.authorization.manager",
@@ -393,10 +398,11 @@ private[hive] class HiveClientImpl(
     logWarning("KKKKKK Authenticator.getUserName1" + authenticator.getUserName)
     logWarning("KKKKKK Authenticator.getGroupNames1" + authenticator.getGroupNames)
     logWarning("KKKKKK Authenticator.getClass" + authenticator.getClass)
-    logWarning("KKKKKK HiveClientImpl.userNameCache" + HiveClientCache.userNameCache)
+    logWarning("KKKKKK HiveClientImpl.userNameCache"
+      + HiveClientCache.userNameCache.get(Thread.currentThread()))
     val userNameField = authenticator.getClass.getDeclaredField("userName")
     userNameField.setAccessible(true)
-    userNameField.set(authenticator, HiveClientCache.userNameCache)
+    userNameField.set(authenticator, HiveClientCache.userNameCache.get(Thread.currentThread()))
     logWarning("KKKKKK Authenticator.getUserName2" + authenticator.getUserName)
     logWarning("KKKKKK Authenticator.getGroupNames2" + authenticator.getGroupNames)
 
