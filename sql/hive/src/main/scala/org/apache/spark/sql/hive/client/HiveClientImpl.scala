@@ -32,7 +32,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.google.common.collect.Sets
 import org.antlr.runtime.NoViableAltException
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.hive.common.{StatsSetupConst, ValidTxnList}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
@@ -281,10 +281,13 @@ private[hive] class HiveClientImpl(
         SessionState.start(newState())
       }
       SessionState.get.initTxnMgr(conf)
-      logInfo("SSSSSS:SessionState.get:" + SessionState.get)
-      logInfo("SSSSSS:SessionState.get.getTxnMgr:" + SessionState.get.getTxnMgr)
-      logInfo("SSSSSS:SessionState.get.getTxnMgr.supportsAcid:"
-        + SessionState.get.getTxnMgr.supportsAcid)
+      val txnStr = SessionState.get.getTxnMgr.getValidTxns.toString
+      conf.set(ValidTxnList.VALID_TXNS_KEY, txnStr)
+      logInfo("AAAAAA:Encoding valid txns info " + txnStr)
+//      logInfo("SSSSSS:SessionState.get:" + SessionState.get)
+//      logInfo("SSSSSS:SessionState.get.getTxnMgr:" + SessionState.get.getTxnMgr)
+//      logInfo("SSSSSS:SessionState.get.getTxnMgr.supportsAcid:"
+//        + SessionState.get.getTxnMgr.supportsAcid)
       val confNew = ss.getConf
       confNew.set("hive.security.authorization.enabled", "true")
 //      confNew.set("hive.security.authorization.manager",
