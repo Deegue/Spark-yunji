@@ -256,6 +256,10 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (context != null) {
         context.setSessionHandle(sessionHandle);
       }
+      String userName2 = getUserName(req);
+      LOG.warn("KKKKKK 正常用户为:" + userName2);
+      HiveClientCache.userNameCache = userName2;
+      LOG.warn("KKKKKK 修改后用户为:" + HiveClientCache.userNameCache);
     } catch (Exception e) {
       LOG.warn("Error opening session: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));
@@ -343,12 +347,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
    */
   SessionHandle getSessionHandle(TOpenSessionReq req, TOpenSessionResp res)
       throws HiveSQLException, LoginException, IOException {
-    String userName2 = getUserName(req);
     String userName = "root";
     LOG.warn("KKKKKK 设置SessionHandle user为root");
-    LOG.warn("KKKKKK 正常用户为:" + userName2);
-    HiveClientCache.userNameCache.put(Thread.currentThread(), userName2);
-    LOG.warn("KKKKKK 修改后用户为:" + HiveClientCache.userNameCache.get(Thread.currentThread()));
     String ipAddress = getIpAddress();
     TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION,
         req.getClient_protocol());

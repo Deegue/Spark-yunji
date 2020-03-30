@@ -1,8 +1,5 @@
 package org.apache.spark.sql.hive.client;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * @Description : HiveClientCache
  * @Author ： 问天(章艺钟)
@@ -11,6 +8,6 @@ import java.util.Map;
  */
 public class HiveClientCache {
 
-    public static Map<Thread, String> userNameCache = new HashMap<>();
+    public static String userNameCache;
 
 }

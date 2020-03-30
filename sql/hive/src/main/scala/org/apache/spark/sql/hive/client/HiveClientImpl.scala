@@ -280,14 +280,6 @@ private[hive] class HiveClientImpl(
         logInfo("AAAAAA Start a new SessionState ")
         SessionState.start(newState())
       }
-      SessionState.get.initTxnMgr(conf)
-      val txnStr = SessionState.get.getTxnMgr.getValidTxns.toString
-      conf.set(ValidTxnList.VALID_TXNS_KEY, txnStr)
-      logInfo("AAAAAA:Encoding valid txns info " + txnStr)
-//      logInfo("SSSSSS:SessionState.get:" + SessionState.get)
-//      logInfo("SSSSSS:SessionState.get.getTxnMgr:" + SessionState.get.getTxnMgr)
-//      logInfo("SSSSSS:SessionState.get.getTxnMgr.supportsAcid:"
-//        + SessionState.get.getTxnMgr.supportsAcid)
       val confNew = ss.getConf
       confNew.set("hive.security.authorization.enabled", "true")
 //      confNew.set("hive.security.authorization.manager",
@@ -308,6 +300,14 @@ private[hive] class HiveClientImpl(
       var tree = pd.parse(hiveCommand, ctx)
       tree = ParseUtils.findRootNonNullToken(tree)
       val sem = SemanticAnalyzerFactory.get(ss.getConf, tree)
+      SessionState.get.initTxnMgr(conf)
+      val txnStr = SessionState.get.getTxnMgr.getValidTxns.toString
+      conf.set(ValidTxnList.VALID_TXNS_KEY, txnStr)
+      logInfo("AAAAAA:Encoding valid txns info " + txnStr)
+      //      logInfo("SSSSSS:SessionState.get:" + SessionState.get)
+      //      logInfo("SSSSSS:SessionState.get.getTxnMgr:" + SessionState.get.getTxnMgr)
+      //      logInfo("SSSSSS:SessionState.get.getTxnMgr.supportsAcid:"
+      //        + SessionState.get.getTxnMgr.supportsAcid)
       sem.analyze(tree, ctx)
       logInfo("AAAAAA Semantic Analysis Completed")
       // validate the plan
@@ -383,6 +383,8 @@ private[hive] class HiveClientImpl(
     val op = ss.getHiveOperation
     logInfo("AAAAAA HiveOperation:" + op)
     val db = sem.getDb
+    logInfo("AAAAAA sem.getDb:" + db)
+    logInfo("AAAAAA SessionState.get.getCurrentDatabase:" + SessionState.get.getCurrentDatabase)
     val additionalInputs = new util.HashSet[ReadEntity]
     for (e <- sem.getInputs.asScala) {
       if (e.getType eq Entity.Type.PARTITION) additionalInputs.add(new ReadEntity(e.getTable))
@@ -402,10 +404,10 @@ private[hive] class HiveClientImpl(
     logWarning("KKKKKK Authenticator.getGroupNames1" + authenticator.getGroupNames)
     logWarning("KKKKKK Authenticator.getClass" + authenticator.getClass)
     logWarning("KKKKKK HiveClientImpl.userNameCache"
-      + HiveClientCache.userNameCache.get(Thread.currentThread()))
+      + HiveClientCache.userNameCache)
     val userNameField = authenticator.getClass.getDeclaredField("userName")
     userNameField.setAccessible(true)
-    userNameField.set(authenticator, HiveClientCache.userNameCache.get(Thread.currentThread()))
+    userNameField.set(authenticator, HiveClientCache.userNameCache)
     logWarning("KKKKKK Authenticator.getUserName2" + authenticator.getUserName)
     logWarning("KKKKKK Authenticator.getGroupNames2" + authenticator.getGroupNames)
 
