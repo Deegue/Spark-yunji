@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
+import java.util
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -35,6 +36,7 @@ import com.google.common.collect.MapMaker
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.ql.hooks.{Hook, HookUtils}
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
@@ -59,6 +61,7 @@ import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
+import org.apache.spark.util.hooks.{PreJobExecuteHook, SparkHookUtils}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -2051,6 +2054,21 @@ class SparkContext(config: SparkConf) extends Logging {
       resultHandler: (Int, U) => Unit): Unit = {
     if (stopped.get()) {
       throw new IllegalStateException("SparkContext has been shutdown")
+    }
+    val preJobSubmitHook = conf.get("spark.job.submit.pre.hook", "")
+//    logError("SSSSSS:preJobSubmitHook:" + preJobSubmitHook)
+    if (preJobSubmitHook.nonEmpty) {
+//      logError("SSSSSS:before getHooks")
+//      logError("SSSSSS:spark.yarn.queue:" + conf.get("spark.yarn.queue", "default"))
+      val hook = Utils.classForName(preJobSubmitHook).newInstance()
+      if (hook != null) {
+        hook match {
+          case i: PreJobExecuteHook =>
+            i.asInstanceOf[PreJobExecuteHook].execute(conf.get("spark.yarn.queue", "default"))
+          case _ =>
+            logError("SSSSSS:" + hook + " should implement `PreJobExecuteHook`")
+        }
+      }
     }
     val callSite = getCallSite
     val cleanedFunc = clean(func)
