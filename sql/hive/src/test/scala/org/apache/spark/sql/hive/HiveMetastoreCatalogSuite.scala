@@ -30,6 +30,23 @@ import org.apache.spark.sql.types._
 class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   import spark.implicits._
 
+  test("test") {
+    withTable("t") {
+//      sql(
+//        """
+//          |CREATE TABLE t (
+//          |c1 boolean,
+//          |c2 tinyint,
+//          |c3 smallint
+//          |)
+//        """.stripMargin)
+    spark.sql("create table test.zyz_test as \nselect tbl_name,max(tbl_time) tbl_time from (\nselect tbl_name,tbl_time from\n(select concat(d.name,'.',c.TBL_NAME) as tbl_name,max(b.param_value) as tbl_time\nfrom src.src_meta_partitions_d a,src.src_meta_partition_params_d b,src.src_meta_tbls_d c ,src.src_meta_dbs_d d\nwhere a.part_id=b.part_id \nand a.tbl_id=c.tbl_id\nand c.db_id=d.db_id\nand param_key='transient_lastDdlTime' \ngroup by d.name,c.TBL_NAME)\n\nunion all\n(\nselect concat(c.name,'.',a.TBL_NAME) as tbl_name,max(b.param_value) as tbl_time\nfrom src.src_meta_tbls_d a ,src.src_meta_table_params_d b,src.src_meta_dbs_d c \nwhere a.db_id=c.db_id \nand a.tbl_id=b.tbl_id \nand b.param_key='transient_lastDdlTime'\ngroup by c.name,a.TBL_NAME\n) \n) group by tbl_name\n\n")
+    val df = spark.sql("SELECT * FROM src")
+    logInfo(df.queryExecution.toString)
+    df.as('a).join(df.as('b), $"a.key" === $"b.key")
+    }
+  }
+
   test("struct field should accept underscore in sub-column name") {
     val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
     val dataType = CatalystSqlParser.parseDataType(hiveTypeStr)

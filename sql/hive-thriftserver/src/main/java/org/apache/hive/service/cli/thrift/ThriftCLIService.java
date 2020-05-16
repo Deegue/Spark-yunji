@@ -38,6 +38,7 @@ import org.apache.hive.service.auth.TSetIpAddressProcessor;
 import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.hive.service.server.HiveServer2;
+import org.apache.spark.sql.execution.HiveClientCache;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
@@ -253,6 +254,10 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (context != null) {
         context.setSessionHandle(sessionHandle);
       }
+      String userName2 = getUserName(req);
+      LOG.warn("KKKKKK 正常用户为:" + userName2);
+      HiveClientCache.userNameCache = userName2;
+      LOG.warn("KKKKKK 修改后用户为:" + HiveClientCache.userNameCache);
     } catch (Exception e) {
       LOG.warn("Error opening session: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));

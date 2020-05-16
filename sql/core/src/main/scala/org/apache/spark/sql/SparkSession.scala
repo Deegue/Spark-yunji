@@ -35,7 +35,8 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.util.hooks.JobAnalyzeHook
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal._
@@ -640,7 +641,7 @@ class SparkSession private(
    */
   def sql(sqlText: String): DataFrame = {
     logInfo("AAAAAA Using hive authorizerV1.(before auth) ")
-    if (sparkContext.getConf.get("spark.sql.hive.auth.enable", "true").equals("true")) {
+    if (sparkContext.getConf.get("spark.sql.hive.auth.enable", "false").equals("true")) {
       val (isAuth, authString) = sessionState.authSQL(sqlText)
       if (isAuth) {
         logInfo("BBBBBB Auth successfully!")
@@ -652,7 +653,50 @@ class SparkSession private(
       logInfo("AAAAAA spark.sql.hive.auth.enable=false")
     }
     logInfo("AAAAAA Will execute SQL.(after auth) ")
+    logInfo("SSSSSS:HiveClientCache.userNameCache:" + HiveClientCache.userNameCache)
+    logInfo("SSSSSS:sparkContext.sparkUser:" + sparkContext.sparkUser)
+    var username = ""
+    if (HiveClientCache.userNameCache != null) {
+      username = HiveClientCache.userNameCache
+    } else {
+      if (sparkContext.sparkUser != null) {
+        username = sparkContext.sparkUser
+      }
+    }
+    val plan = sessionState.sqlParser.parsePlan(sqlText)
+    val analyzeHook = conf.get("spark.job.analyze.hook", "")
+    if (analyzeHook.nonEmpty) {
+      val hook = Utils.classForName(analyzeHook).newInstance()
+      if (hook != null) {
+        hook match {
+          case i: JobAnalyzeHook =>
+            i.asInstanceOf[JobAnalyzeHook].postAnalyze(
+//              sessionState.sqlParser.parsePlan(sqlText),
+              sessionState.executePlan(sessionState.sqlParser.parsePlan(sqlText)).analyzed,
+              getTables(plan).asJava.toString,
+              sqlText,
+              username)
+          case _ =>
+            logError("SSSSSS:" + hook + " should implement `JobAnalyzeHook`")
+        }
+      }
+    }
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
+  }
+
+  def getTables(plan: LogicalPlan) : Seq[String] = {
+    val tables = scala.collection.mutable.LinkedHashSet.empty[String]
+    var i = 0
+    while (true) {
+      if (plan(i) == null) {
+        return tables.toSeq
+      } else if (plan(i).isInstanceOf[UnresolvedRelation]) {
+        val tableIdentifier = plan(i).asInstanceOf[UnresolvedRelation].tableIdentifier
+        tables += tableIdentifier.unquotedString.toLowerCase
+      }
+      i = i + 1
+    }
+    tables.toSeq
   }
 
   /**
